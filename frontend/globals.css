@@ -8,7 +8,7 @@ body {
   margin: 0px;
   height: 100%;
 }
-/* a blue color as a generic focus style */
+
 button:focus-visible {
   outline: 2px solid #4a90e2 !important;
   outline: -webkit-focus-ring-color auto 5px !important;
@@ -16,7 +16,6 @@ button:focus-visible {
 a {
   text-decoration: none;
 }
-/* @FONTWARNING[{"type": "restricted", "family": "Geo-Regular", "weight": "400", "style": "normal", "allowsCrossOrigin": false}] */
 
 @font-face {
     font-family: "Ari-W9500";

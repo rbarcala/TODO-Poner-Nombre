@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
 // DATOS DE PRUEBA
-// Reemplazá esto con tu llamada real al backend:
-//   const partidas = await fetch('/api/partidas').then(r => r.json());
-// ─────────────────────────────────────────────
+// Reemplazar esto con llamada real al backend:
+// const partidas = await fetch('/api/partidas').then(r => r.json());
 
 const PARTIDAS_MOCK = [
     { id: 1, nombre: "Partida 1", fecha: "12/09/2025" },
@@ -69,7 +67,7 @@ function eliminarPartida(id) {
 // INICIO
 // ─────────────────────────────────────────────
 
-// En tu app real:
+// En la app real:
 // fetch('/api/partidas')
 //     .then(r => r.json())
 //     .then(datos => renderPartidas(datos));
