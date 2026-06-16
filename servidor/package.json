@@ -1,0 +1,9 @@
+{
+  "name": "servidor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.21.0"
+  }
+}
