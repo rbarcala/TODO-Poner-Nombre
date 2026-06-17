@@ -14,6 +14,11 @@ const {
     validateCustomMap
 } = require('./logic/mapLogic');
 
+const {
+    validateCivilization,
+    validateTroopType
+} = require('./logic/entityValidators');
+
 console.log("=== INICIANDO PRUEBAS DE LÓGICA EN CARPETA LOGIC ===");
 
 // 1. Mock de las aristas del Grafo (Fronteras de la Base de Datos)
@@ -159,5 +164,56 @@ if (!validationValido.isValid) {
     console.log("- Errores en mapa válido (¡BUG!):");
     validationValido.errors.forEach(err => console.log(`  * ${err}`));
 }
+
+// 8. Probando Validación de Civilizaciones
+console.log("\n8. Probando Validación de Civilizaciones:");
+const civInvalida = {
+    nombre: "X",
+    color_hex: "rojo",
+    economia: 0,
+    tecnologia: 11,
+    agresividad: 5,
+    tropas: -5,
+    resistencia_terreno_id: 99
+};
+const terrenosDisponibles = [{ id: 1 }, { id: 2 }];
+
+const valCivInvalida = validateCivilization(civInvalida, terrenosDisponibles);
+console.log(`- Validación Civ Inválida (esperado isValid: false): ${valCivInvalida.isValid}`);
+console.log("- Errores detectados en Civilización:");
+valCivInvalida.errors.forEach(err => console.log(`  * ${err}`));
+
+const civValida = {
+    nombre: "Imperio Romano",
+    color_hex: "#E50914",
+    economia: 6,
+    tecnologia: 8,
+    agresividad: 9,
+    tropas: 15,
+    resistencia_terreno_id: 2
+};
+const valCivValida = validateCivilization(civValida, terrenosDisponibles);
+console.log(`- Validación Civ Válida (esperado isValid: true): ${valCivValida.isValid}`);
+
+// 9. Probando Validación de Tipos de Tropas
+console.log("\n9. Probando Validación de Tipos de Tropas:");
+const tropaInvalida = {
+    tipo: "XP",
+    dado_min: 5,
+    dado_max: 3
+};
+const valTropaInvalida = validateTroopType(tropaInvalida);
+console.log(`- Validación Tropa Inválida (esperado isValid: false): ${valTropaInvalida.isValid}`);
+console.log("- Errores detectados en Tropa:");
+valTropaInvalida.errors.forEach(err => console.log(`  * ${err}`));
+
+const tropaValida = {
+    tipo: "Caballería de Elite",
+    descripcion: "Fuerzas montadas pesadas de asalto rápido.",
+    dado_min: 2,
+    dado_max: 8
+};
+const valTropaValida = validateTroopType(tropaValida);
+console.log(`- Validación Tropa Válida (esperado isValid: true): ${valTropaValida.isValid}`);
 
 console.log("\n=== PRUEBAS DE CARPETA LOGIC COMPLETADAS CON ÉXITO ===");
