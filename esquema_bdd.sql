@@ -102,6 +102,7 @@ CREATE TABLE "tropas_estacionadas"(
 CREATE TABLE "tipos_de_tropas"(
     "id" SERIAL NOT NULL,
     "tipo" VARCHAR(50) NOT NULL,
+    "descripcion" TEXT NULL,
     "dado_min" INTEGER NULL,
     "dado_max" INTEGER NULL
 );
@@ -151,3 +152,14 @@ ALTER TABLE
     "paises" ADD CONSTRAINT "paises_resistencia_terreno_id_foreign" FOREIGN KEY("resistencia_terreno_id") REFERENCES "tipos_de_terreno"("id");
 ALTER TABLE
     "paises_partidas" ADD CONSTRAINT "paises_partidas_pais_id_foreign" FOREIGN KEY("pais_id") REFERENCES "paises"("id");
+
+CREATE TABLE "fronteras"(
+    "id_territorio_origen" INTEGER NOT NULL,
+    "id_territorio_destino" INTEGER NOT NULL
+);
+ALTER TABLE
+    "fronteras" ADD CONSTRAINT "fronteras_origen_destino_unique" UNIQUE("id_territorio_origen", "id_territorio_destino");
+ALTER TABLE
+    "fronteras" ADD CONSTRAINT "fronteras_id_territorio_origen_foreign" FOREIGN KEY("id_territorio_origen") REFERENCES "territorios"("id");
+ALTER TABLE
+    "fronteras" ADD CONSTRAINT "fronteras_id_territorio_destino_foreign" FOREIGN KEY("id_territorio_destino") REFERENCES "territorios"("id");
