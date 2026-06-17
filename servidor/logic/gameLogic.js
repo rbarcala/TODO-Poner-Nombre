@@ -59,11 +59,30 @@ function rollDie(min, max) {
  * @returns {Object} Resultado del combate
  */
 function resolveCombat(attackerCountry, defenderCountry, terrain, attackingTroops, defendingTroops) {
+    if (attackerCountry && defenderCountry && attackerCountry.id === defenderCountry.id) {
+        throw new Error("No puedes atacar un territorio que pertenece a tu misma civilización.");
+    }
+
     if (!attackingTroops || attackingTroops.length === 0) {
         throw new Error("El atacante debe enviar al menos una tropa para el combate.");
     }
+    
+    // Si el territorio no está ocupado (no hay defensor o tropas defensoras)
     if (!defendingTroops || defendingTroops.length === 0) {
-        throw new Error("El defensor debe tener al menos una tropa estacionada.");
+        return {
+            totalAttack: attackingTroops.length,
+            totalDefense: 0,
+            attackerWins: true,
+            attackRolls: [],
+            defenseRolls: [],
+            totalAttackBase: 0,
+            totalDefenseBase: 0,
+            modAttackUsed: 1.0,
+            modDefenseUsed: 1.0,
+            attackerHasResistance: false,
+            defenderHasResistance: false,
+            autoConquest: true
+        };
     }
 
     // 1. Tiradas bases
