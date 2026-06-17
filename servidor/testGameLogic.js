@@ -25,6 +25,11 @@ const {
     executeBotTurn
 } = require('./logic/turnManager');
 
+const {
+    validateDeploymentAction,
+    validateMoveAction
+} = require('./logic/actionValidators');
+
 console.log("=== INICIANDO PRUEBAS DE LÓGICA EN CARPETA LOGIC ===");
 
 // 1. Mock de las aristas del Grafo (Fronteras de la Base de Datos)
@@ -264,5 +269,50 @@ botTurnResult.combatLogs.forEach(c => {
     console.log(`    > Origen: ${c.origen_id} -> Destino: ${c.destino_id} | Dados: ${c.totalAttack} vs ${c.totalDefense} | ¿Ganador Bot?: ${c.attackerWins}`);
 });
 console.log(`  * ¿El Bot ganó la partida?: ${botTurnResult.isGameOver} (Ganador ID: ${botTurnResult.winnerCountryId})`);
+
+// 12. Probando Validación de Acciones de Juego
+console.log("\n12. Probando Validación de Acciones de Juego (Despliegues y Movimientos):");
+
+// Caso A: Despliegue inválido (desplegar en territorio enemigo o exceder el pool)
+const activePlayer = 100;
+const playerTerrs = [
+    { id: 200, pais_duenio_id: 100 },
+    { id: 201, pais_duenio_id: 100 }
+];
+const badDeployments = [
+    { territorio_id: 200, cantidad: 5 },
+    { territorio_id: 300, cantidad: 2 }
+];
+const valDep1 = validateDeploymentAction(activePlayer, playerTerrs, badDeployments, 6);
+console.log(`- Validación Despliegue con Territorio Enemigo (esperado isValid: false): ${valDep1.isValid}`);
+valDep1.errors.forEach(err => console.log(`  * ${err}`));
+
+const valDep2 = validateDeploymentAction(activePlayer, playerTerrs, [{ territorio_id: 200, cantidad: 8 }], 6);
+console.log(`- Validación Despliegue Excediendo Tropas (esperado isValid: false): ${valDep2.isValid}`);
+valDep2.errors.forEach(err => console.log(`  * ${err}`));
+
+const valDepCorrect = validateDeploymentAction(activePlayer, playerTerrs, [{ territorio_id: 200, cantidad: 4 }, { territorio_id: 201, cantidad: 2 }], 6);
+console.log(`- Validación Despliegue Correcto (esperado isValid: true): ${valDepCorrect.isValid}`);
+
+// Caso B: Movimiento/Ataque inválido y válido
+const originTerrGood = { id: 200, pais_duenio_id: 100, tropas_actuales: 3 };
+const originTerrWeak = { id: 201, pais_duenio_id: 100, tropas_actuales: 1 };
+const destTerrEnemy = { id: 300, pais_duenio_id: 999, tropas_actuales: 2 };
+const destTerrFar = { id: 400, pais_duenio_id: 999, tropas_actuales: 1 };
+
+const valMove1 = validateMoveAction(activePlayer, originTerrWeak, destTerrEnemy, 1, fronterasMock);
+console.log(`- Movimiento desde territorio con pocas tropas (esperado isValid: false): ${valMove1.isValid}`);
+valMove1.errors.forEach(err => console.log(`  * ${err}`));
+
+const valMove2 = validateMoveAction(activePlayer, originTerrGood, destTerrFar, 2, fronterasMock);
+console.log(`- Movimiento a territorio no adyacente (esperado isValid: false): ${valMove2.isValid}`);
+valMove2.errors.forEach(err => console.log(`  * ${err}`));
+
+const valMoveCorrectAttack = validateMoveAction(activePlayer, originTerrGood, destTerrEnemy, 2, fronterasMock);
+console.log(`- Movimiento Correcto/Ataque (esperado isValid: true, isAttack: true): ${valMoveCorrectAttack.isValid}, esAtaque: ${valMoveCorrectAttack.isAttack}`);
+
+const destTerrAlly = { id: 201, pais_duenio_id: 100, tropas_actuales: 1 };
+const valMoveCorrectTransfer = validateMoveAction(activePlayer, originTerrGood, destTerrAlly, 2, fronterasMock);
+console.log(`- Movimiento Correcto/Traslado (esperado isValid: true, isAttack: false): ${valMoveCorrectTransfer.isValid}, esAtaque: ${valMoveCorrectTransfer.isAttack}`);
 
 console.log("\n=== PRUEBAS DE CARPETA LOGIC COMPLETADAS CON ÉXITO ===");
