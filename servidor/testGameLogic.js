@@ -19,6 +19,12 @@ const {
     validateTroopType
 } = require('./logic/entityValidators');
 
+const {
+    getNextActivePlayer,
+    checkVictoryCondition,
+    executeBotTurn
+} = require('./logic/turnManager');
+
 console.log("=== INICIANDO PRUEBAS DE LÓGICA EN CARPETA LOGIC ===");
 
 // 1. Mock de las aristas del Grafo (Fronteras de la Base de Datos)
@@ -215,5 +221,48 @@ const tropaValida = {
 };
 const valTropaValida = validateTroopType(tropaValida);
 console.log(`- Validación Tropa Válida (esperado isValid: true): ${valTropaValida.isValid}`);
+
+// 10. Probando Turnos y Victoria
+console.log("\n10. Probando Turnos y Victoria:");
+const playersList = [
+    { pais_id: 10, eliminado: false },
+    { pais_id: 11, eliminado: true },
+    { pais_id: 12, eliminado: false }
+];
+
+console.log(`- Siguiente jugador tras ID 10 (esperado: 12 ya que 11 está eliminado): ${getNextActivePlayer(playersList, 10)}`);
+console.log(`- Siguiente jugador tras ID 12 (esperado: 10 loops back): ${getNextActivePlayer(playersList, 12)}`);
+
+const territoriesGameOver = [
+    { id: 1, pais_duenio_id: 10 },
+    { id: 2, pais_duenio_id: 10 }
+];
+const victoryResult = checkVictoryCondition(territoriesGameOver, playersList.filter(p => !p.eliminado));
+console.log(`- Victoria de la partida (esperado isGameOver: true, winner: 10): ${victoryResult.isGameOver}, Winner: ${victoryResult.winnerCountryId}`);
+
+// 11. Probando Simulación de Turno del Bot
+console.log("\n11. Probando Simulación de Turno del Bot (executeBotTurn):");
+const botCountryData = { id: 100, economia: 3, agresividad: 9, tecnologia: 5, resistencia_terreno_id: 1 };
+const territoriesInGame = [
+    { id: 200, pais_duenio_id: 100, tropas_actuales: 2, tipo_terreno_id: 1 },
+    { id: 201, pais_duenio_id: 100, tropas_actuales: 2, tipo_terreno_id: 1 },
+    { id: 300, pais_duenio_id: 999, tropas_actuales: 1, tipo_terreno_id: 1 }
+];
+const participatingCountriesList = [
+    { pais_id: 100, eliminado: false },
+    { pais_id: 999, eliminado: false }
+];
+const catalogDeTropas = [
+    { id: 1, tipo: "Unidad Común", dado_min: 1, dado_max: 6 }
+];
+
+const botTurnResult = executeBotTurn(botCountryData, territoriesInGame, fronterasMock, participatingCountriesList, catalogDeTropas);
+console.log("- Resultados del Turno del Bot:");
+console.log(`  * Despliegues: ${JSON.stringify(botTurnResult.deployments)}`);
+console.log(`  * Combates realizados: ${botTurnResult.combatLogs.length}`);
+botTurnResult.combatLogs.forEach(c => {
+    console.log(`    > Origen: ${c.origen_id} -> Destino: ${c.destino_id} | Dados: ${c.totalAttack} vs ${c.totalDefense} | ¿Ganador Bot?: ${c.attackerWins}`);
+});
+console.log(`  * ¿El Bot ganó la partida?: ${botTurnResult.isGameOver} (Ganador ID: ${botTurnResult.winnerCountryId})`);
 
 console.log("\n=== PRUEBAS DE CARPETA LOGIC COMPLETADAS CON ÉXITO ===");
