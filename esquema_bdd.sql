@@ -14,7 +14,6 @@ CREATE TABLE "paises"(
     "economia" SMALLINT NOT NULL,
     "tecnologia" SMALLINT NOT NULL,
     "agresividad" SMALLINT NOT NULL,
-    "tropas" INTEGER NOT NULL,
     "resistencia_terreno_id" INTEGER NULL REFERENCES "tipos_de_terreno"("id")
 );
 
