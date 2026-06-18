@@ -33,7 +33,7 @@ CREATE TABLE "paises_partidas"(
     "partida_id" INTEGER NOT NULL REFERENCES "partidas"("id"),
     "tropas_actuales" INTEGER NOT NULL,
     "eliminado" BOOLEAN NULL DEFAULT FALSE,
-    UNIQUE("partida_id", "pais_id") -- Restricción compuesta declarada al final
+    UNIQUE("partida_id", "pais_id")
 );
 
 CREATE TABLE "territorios"(
@@ -44,7 +44,7 @@ CREATE TABLE "territorios"(
     "coord_y" SMALLINT NOT NULL,
     "tipo_terreno_id" INTEGER NULL REFERENCES "tipos_de_terreno"("id"),
     "pais_duenio_id" INTEGER NULL REFERENCES "paises"("id"),
-    UNIQUE("partida_id", "coord_x", "coord_y") -- Restricción compuesta declarada al final
+    UNIQUE("partida_id", "coord_x", "coord_y")
 );
 
 CREATE TABLE "tipos_de_movimiento"(
@@ -93,5 +93,5 @@ CREATE TABLE "tropas_estacionadas"(
 CREATE TABLE "fronteras"(
     "id_territorio_origen" INTEGER NOT NULL REFERENCES "territorios"("id"),
     "id_territorio_destino" INTEGER NOT NULL REFERENCES "territorios"("id"),
-    UNIQUE("id_territorio_origen", "id_territorio_destino") -- ¡Listo! Metido adentro de la tabla
+    UNIQUE("id_territorio_origen", "id_territorio_destino")
 );
