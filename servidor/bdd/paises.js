@@ -2,11 +2,11 @@ import pkg from 'pg';
 const { Pool } = pkg;
 
 const pool = new Pool({
-    user: 'usuario',
-    host: 'bdd', 
-    database: 'bdd',
-    password: 'contraseña',
-    port: 8080,
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST, 
+    database: process.env.DB_NAME,
+    password: process.env.DB_PASS,
+    port: parseInt(process.env.DB_PORT || '5432'), // Docker le va a inyectar el 5432 solo
 });
 
 export const obtenerPaises = async () => {
