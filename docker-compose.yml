@@ -1,1 +1,21 @@
-FROM .
+services:
+  app:
+    build: .
+    image: backend_paises
+    ports:
+      - "8000:3000"
+    environment:
+      DB_HOST: "bdd"
+      DB_PORT: "5432"
+      DB_USER: "usuario"
+      DB_PASS: "contraseña"
+      DB_NAME: "bdd"
+
+  bdd:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: "usuario"
+      POSTGRES_PASSWORD: "contraseña"
+      POSTGRES_DB: "bdd"
+    volumes:
+      - ./data:/var/lib/postgresql/data
