@@ -21,4 +21,5 @@ services:
       POSTGRES_DB: "bdd"
     volumes:
       - ./data:/var/lib/postgresql
-      - ./esquema_bdd.sql:/docker-entrypoint-initdb.d/schemas.sql:ro
+      - ./01_esquema_bdd.sql:/docker-entrypoint-initdb.d/01_esquema_bdd.sql:ro
+      - ./02_seeds.sql:/docker-entrypoint-initdb.d/02_seeds.sql:ro
