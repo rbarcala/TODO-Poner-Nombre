@@ -1,1 +1,25 @@
-FROM .
+services:
+  app:
+    build: ./servidor
+    image: backend_paises
+    ports:
+      - "8000:3000"
+    environment:
+      DB_HOST: "bdd"
+      DB_PORT: "5432"
+      DB_USER: "usuario"
+      DB_PASS: "contraseña"
+      DB_NAME: "bdd"
+    depends_on:
+      - bdd
+
+  bdd:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: "usuario"
+      POSTGRES_PASSWORD: "contraseña"
+      POSTGRES_DB: "bdd"
+    volumes:
+      - ./data:/var/lib/postgresql
+      - ./01_esquema_bdd.sql:/docker-entrypoint-initdb.d/01_esquema_bdd.sql:ro
+      - ./02_seeds.sql:/docker-entrypoint-initdb.d/02_seeds.sql:ro
