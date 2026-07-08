@@ -2,7 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN npm install -g http-server @tailwindcss/cli
+RUN npm install http-server @tailwindcss/cli tailwindcss
 
 COPY . .
 

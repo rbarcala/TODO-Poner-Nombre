@@ -6,7 +6,8 @@ services:
       - "8080:8080"
     volumes:
       - ./app:/app
-    command: sh -c "tailwindcss -i ./css/input.css -o ./css/output.css --watch & http-server -p 8080"
+      - /app/node_modules
+    command: sh -c "./node_modules/.bin/tailwindcss -i ./css/input.css -o ./css/output.css --watch & ./node_modules/.bin/http-server -p 8080 -c-1"
 
   app:
     build: ./servidor
