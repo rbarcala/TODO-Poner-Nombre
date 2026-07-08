@@ -1,4 +1,13 @@
 services:
+  frontend:
+    build: 
+      context: ./app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./app:/app
+    command: sh -c "tailwindcss -i ./css/input.css -o ./css/output.css --watch & http-server -p 8080"
+
   app:
     build: ./servidor
     image: backend_paises
