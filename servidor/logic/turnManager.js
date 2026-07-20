@@ -2,8 +2,8 @@
  * Módulo de Gestión de Turnos y Ciclo de Vida del Juego
  */
 
-const { resolveCombat } = require('./gameLogic');
-const { getBotDeployment, getBotAttacks } = require('./botLogic');
+import { resolveCombat } from './gameLogic.js';
+import { getBotDeployment, getBotAttacks } from './botLogic.js';
 
 /**
  * Determina cuál es la siguiente civilización activa en la partida, omitiendo las eliminadas.
@@ -12,11 +12,11 @@ const { getBotDeployment, getBotAttacks } = require('./botLogic');
  * @param {number} activeCountryId - ID de la civilización activa actual
  * @returns {number|null} ID de la siguiente civilización activa, o null si no se puede avanzar.
  */
-function getNextActivePlayer(participatingCountries, activeCountryId) {
+export function getNextActivePlayer(participatingCountries, activeCountryId) {
     if (!participatingCountries || participatingCountries.length === 0) return null;
     
-    const activeIndex = participatingCountries.findIndex(p => p.pais_id === activeCountryId);
-    if (activeIndex === -1) return participatingCountries[0].pais_id; // Si no se encuentra, inicia el primero
+    const activeIndex = participatingCountries.findIndex(p => (p.pais_id || p.id) === activeCountryId);
+    if (activeIndex === -1) return participatingCountries[0].pais_id || participatingCountries[0].id;
 
     let nextIndex = (activeIndex + 1) % participatingCountries.length;
     let attempts = 0;
@@ -27,32 +27,27 @@ function getNextActivePlayer(participatingCountries, activeCountryId) {
         attempts++;
     }
 
-    // Si dimos la vuelta completa y todos están eliminados (caso extremo), retornar null
     if (attempts === participatingCountries.length) {
         return null;
     }
 
-    return participatingCountries[nextIndex].pais_id;
+    return participatingCountries[nextIndex].pais_id || participatingCountries[nextIndex].id;
 }
 
 /**
  * Verifica si se ha alcanzado una condición de victoria en la partida.
- * La partida termina si todas las civilizaciones participantes menos una han sido eliminadas,
- * o si un único bando posee todos los territorios del mapa.
  * 
  * @param {Array<Object>} territories - Lista de territorios en la partida [{ pais_duenio_id }]
  * @param {Array<Object>} participatingCountries - Lista de países asociados [{ pais_id, eliminado }]
  * @returns {Object} { isGameOver: boolean, winnerCountryId: number|null }
  */
-function checkVictoryCondition(territories, participatingCountries) {
+export function checkVictoryCondition(territories, participatingCountries) {
     const nonEliminated = participatingCountries.filter(p => !p.eliminado);
 
-    // Condición 1: Solo queda un jugador sin eliminar
     if (nonEliminated.length === 1) {
-        return { isGameOver: true, winnerCountryId: nonEliminated[0].pais_id };
+        return { isGameOver: true, winnerCountryId: nonEliminated[0].pais_id || nonEliminated[0].id };
     }
 
-    // Condición 2: Un solo bando posee todos los territorios del mapa
     const activeOwners = new Set(
         territories
             .map(t => t.pais_duenio_id)
@@ -69,8 +64,6 @@ function checkVictoryCondition(territories, participatingCountries) {
 
 /**
  * Simula y ejecuta de manera completa el turno de un Bot.
- * Genera sus refuerzos, decide dónde desplegar, ejecuta ataques automáticos
- * contra sus vecinos, y retorna el log de acciones para que el frontend lo anime.
  * 
  * @param {Object} botCountry - Datos del Bot { id, economia, agresividad, tecnologia, resistencia_terreno_id }
  * @param {Array<Object>} allTerritories - Todos los territorios de la partida en su estado actual
@@ -79,18 +72,14 @@ function checkVictoryCondition(territories, participatingCountries) {
  * @param {Array<Object>} troopTypesCatalog - Catálogo de tipos de tropas con dados
  * @returns {Object} Resultado del turno { deployments, combatLogs, isGameOver, winnerCountryId, updatedTerritories }
  */
-function executeBotTurn(botCountry, allTerritories, fronteras, participatingCountries, troopTypesCatalog) {
-    // Clonar los territorios para realizar la simulación en memoria sin mutar los parámetros
+export function executeBotTurn(botCountry, allTerritories, fronteras, participatingCountries, troopTypesCatalog) {
     const tempTerritories = JSON.parse(JSON.stringify(allTerritories));
-    const botId = botCountry.id;
-
-    // Catálogo indexado para acceso rápido de dados de las tropas
-    const troopCatalogMap = new Map(troopTypesCatalog.map(t => [t.id, t]));
+    const botId = botCountry.id || botCountry.pais_id;
 
     const turnLog = {
         botId: botId,
-        deployments: [], // [{ territorio_id, cantidad }]
-        combatLogs: [],  // [{ origen_id, destino_id, atacante_dados, defensor_dados, attackerWins, ... }]
+        deployments: [],
+        combatLogs: [],
         isGameOver: false,
         winnerCountryId: null,
         updatedTerritories: []
@@ -99,14 +88,12 @@ function executeBotTurn(botCountry, allTerritories, fronteras, participatingCoun
     // 1. Fase de Despliegue
     const botTerritories = tempTerritories.filter(t => t.pais_duenio_id === botId);
     if (botTerritories.length === 0) {
-        // El bot no tiene territorios (ya fue eliminado de facto)
         return turnLog;
     }
 
     const deployments = getBotDeployment(botCountry, botTerritories, tempTerritories, fronteras);
     turnLog.deployments = deployments;
 
-    // Aplicar despliegues en el mapa simulado
     for (const dep of deployments) {
         const t = tempTerritories.find(x => x.id === dep.territorio_id);
         if (t) {
@@ -116,13 +103,12 @@ function executeBotTurn(botCountry, allTerritories, fronteras, participatingCoun
 
     // 2. Fase de Ataque
     let attacksRemaining = true;
-    let safeguardCounter = 0; // Evitar bucles infinitos en simulación
+    let safeguardCounter = 0;
 
     while (attacksRemaining && safeguardCounter < 15) {
         safeguardCounter++;
         const currentBotTerritories = tempTerritories.filter(t => t.pais_duenio_id === botId);
         
-        // Obtener ataques planificados por la heurística en este ciclo
         const plannedAttacks = getBotAttacks(botCountry, currentBotTerritories, tempTerritories, fronteras);
 
         if (plannedAttacks.length === 0) {
@@ -130,28 +116,27 @@ function executeBotTurn(botCountry, allTerritories, fronteras, participatingCoun
             break;
         }
 
-        // Ejecutar el ataque prioritario
         const attack = plannedAttacks[0];
         const origin = tempTerritories.find(x => x.id === attack.origen_id);
         const target = tempTerritories.find(x => x.id === attack.destino_id);
 
         if (!origin || !target) continue;
 
-        // Cargar tropas participantes (simplificado: asumimos tropas genéricas usando el catálogo de dados)
-        // En un juego completo, las tropas tendrían sus IDs en tropas_estacionadas.
-        // Aquí tomamos tropas ficticias con dados estándar del catálogo para resolver el combate.
-        const defaultTroop = troopTypesCatalog[0] || { dado_min: 1, dado_max: 6 };
+        const defaultTroop = (troopTypesCatalog && troopTypesCatalog.length > 0) 
+            ? troopTypesCatalog[0] 
+            : { dado_min: 1, dado_max: 6 };
         
         const attackingTroopsList = Array(attack.tropas_atacantes).fill(defaultTroop);
         const defendingTroopsList = Array(target.tropas_actuales || 1).fill(defaultTroop);
 
-        // Resolvemos el combate
-        // Para simplificar, pasamos objetos mínimos de facciones
         const attackerObj = { id: botId, resistencia_terreno_id: botCountry.resistencia_terreno_id };
         const defenderObj = target.pais_duenio_id ? { id: target.pais_duenio_id } : null;
         
-        // Terreno ficticio
-        const terrainObj = { id: target.tipo_terreno_id, modificador_ataque: 1.0, modificador_defensa: 1.0 };
+        const terrainObj = { 
+            id: target.tipo_terreno_id, 
+            modificador_ataque: target.modificador_ataque || 1.0, 
+            modificador_defensa: target.modificador_defensa || 1.0 
+        };
 
         const combatResult = resolveCombat(attackerObj, defenderObj, terrainObj, attackingTroopsList, defendingTroopsList);
 
@@ -169,16 +154,13 @@ function executeBotTurn(botCountry, allTerritories, fronteras, participatingCoun
         turnLog.combatLogs.push(combatLog);
 
         if (combatResult.attackerWins) {
-            // Conquista:
             target.pais_duenio_id = botId;
-            target.tropas_actuales = attack.tropas_atacantes; // Mueve las tropas al nuevo territorio
-            origin.tropas_actuales = 1; // Deja la tropa de resguardo obligatoria en el origen
+            target.tropas_actuales = attack.tropas_atacantes;
+            origin.tropas_actuales = 1;
         } else {
-            // Derrota:
-            origin.tropas_actuales = 1; // Pierde las tropas enviadas al asalto
+            origin.tropas_actuales = 1;
         }
 
-        // 3. Evaluar Condición de Victoria tras cada batalla
         const victory = checkVictoryCondition(tempTerritories, participatingCountries);
         if (victory.isGameOver) {
             turnLog.isGameOver = true;
@@ -191,9 +173,3 @@ function executeBotTurn(botCountry, allTerritories, fronteras, participatingCoun
     turnLog.updatedTerritories = tempTerritories;
     return turnLog;
 }
-
-module.exports = {
-    getNextActivePlayer,
-    checkVictoryCondition,
-    executeBotTurn
-};

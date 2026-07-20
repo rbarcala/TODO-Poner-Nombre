@@ -2,7 +2,7 @@
  * Módulo de Inteligencia Artificial y Toma de Decisiones del Bot/NPC
  */
 
-const { areAdjacent, calculateReinforcements } = require('./gameLogic');
+import { areAdjacent, calculateReinforcements } from './gameLogic.js';
 
 /**
  * Determina dónde debe desplegar el Bot sus tropas de refuerzo.
@@ -13,7 +13,7 @@ const { areAdjacent, calculateReinforcements } = require('./gameLogic');
  * @param {Array<Object>} fronteras - Listado de aristas del grafo (fronteras)
  * @returns {Array<Object>} Despliegues decididos [ { territorio_id, cantidad } ]
  */
-function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras) {
+export function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras) {
     const reinforcements = calculateReinforcements(botTerritories.length, botCountry.economia);
     const deployments = [];
 
@@ -132,7 +132,7 @@ function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras)
  * @param {Array<Object>} fronteras - Listado de aristas del grafo (fronteras)
  * @returns {Array<Object>} Lista de ataques a ejecutar [ { origen_id, destino_id, tropas_atacantes } ]
  */
-function getBotAttacks(botCountry, botTerritories, allTerritories, fronteras) {
+export function getBotAttacks(botCountry, botTerritories, allTerritories, fronteras) {
     const attacks = [];
     const aggressiveness = botCountry.agresividad || 5;
 
@@ -204,8 +204,3 @@ function getBotAttacks(botCountry, botTerritories, allTerritories, fronteras) {
 
     return attacks;
 }
-
-module.exports = {
-    getBotDeployment,
-    getBotAttacks
-};

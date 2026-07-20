@@ -11,7 +11,7 @@
  * @param {Array<Object>} fronteras - Listado de aristas [{ id_territorio_origen, id_territorio_destino }]
  * @returns {boolean} True si el grafo está 100% conectado (es conexo)
  */
-function isMapConnected(territories, fronteras) {
+export function isMapConnected(territories, fronteras) {
     if (territories.length <= 1) return true;
 
     // 1. Construir lista de adyacencias del grafo
@@ -62,7 +62,7 @@ function isMapConnected(territories, fronteras) {
  * @param {Array<number>} [participatingCountryIds] - IDs de los países/civilizaciones que juegan la partida
  * @returns {Object} { isValid: boolean, errors: Array<string> }
  */
-function validateCustomMap(territories, fronteras, terrainTypes, participatingCountryIds) {
+export function validateCustomMap(territories, fronteras, terrainTypes, participatingCountryIds) {
     const errors = [];
 
     // Regla 1: Mínimo de territorios
@@ -151,7 +151,6 @@ function validateCustomMap(territories, fronteras, terrainTypes, participatingCo
             }
         });
     } else {
-        // Validación de resguardo si no se pasan bandos: al menos dos bandos distintos en el mapa
         const assignedCountryIds = new Set(
             territories
                 .map(t => t.pais_duenio_id)
@@ -163,7 +162,6 @@ function validateCustomMap(territories, fronteras, terrainTypes, participatingCo
     }
 
     // Regla 5: Conectividad total (Grafo conexo por BFS)
-    // Solo si no hay errores estructurales previos, evaluamos conectividad
     if (errors.length === 0) {
         const connected = isMapConnected(territories, fronteras || []);
         if (!connected) {
@@ -177,7 +175,75 @@ function validateCustomMap(territories, fronteras, terrainTypes, participatingCo
     };
 }
 
-module.exports = {
-    isMapConnected,
-    validateCustomMap
-};
+/**
+ * Genera un mapa en grilla (filas x cols) con distribución de países y terrenos.
+ * 
+ * @param {number} rows 
+ * @param {number} cols 
+ * @param {Array<number>} participatingCountryIds 
+ * @param {Array<number>} terrainTypeIds 
+ * @returns {Object} { territorios: Array, fronteras: Array }
+ */
+export function generateMap(rows = 4, cols = 4, participatingCountryIds = [], terrainTypeIds = [1]) {
+    const territorios = [];
+    const fronteras = [];
+    const grid = [];
+
+    let currentId = 1;
+
+    // 1. Crear grilla de territorios
+    for (let r = 0; r < rows; r++) {
+        grid[r] = [];
+        for (let c = 0; c < cols; c++) {
+            const countryAssigned = participatingCountryIds.length > 0
+                ? participatingCountryIds[(r * cols + c) % participatingCountryIds.length]
+                : null;
+            
+            const terrainAssigned = terrainTypeIds.length > 0
+                ? terrainTypeIds[(r + c) % terrainTypeIds.length]
+                : 1;
+
+            const t = {
+                id: currentId++,
+                nombre: `Territorio (${c + 1}, ${r + 1})`,
+                x: c + 1,
+                y: r + 1,
+                coord_x: c + 1,
+                coord_y: r + 1,
+                tipo_terreno_id: terrainAssigned,
+                pais_duenio_id: countryAssigned,
+                tropas_actuales: 3
+            };
+
+            territorios.push(t);
+            grid[r][c] = t;
+        }
+    }
+
+    // 2. Conectar fronteras horizontales y verticales
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const current = grid[r][c];
+
+            // Derecha
+            if (c + 1 < cols) {
+                const right = grid[r][c + 1];
+                fronteras.push({
+                    id_territorio_origen: current.id,
+                    id_territorio_destino: right.id
+                });
+            }
+
+            // Abajo
+            if (r + 1 < rows) {
+                const down = grid[r + 1][c];
+                fronteras.push({
+                    id_territorio_origen: current.id,
+                    id_territorio_destino: down.id
+                });
+            }
+        }
+    }
+
+    return { territorios, fronteras };
+}

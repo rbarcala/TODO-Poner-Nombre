@@ -1,34 +1,34 @@
-const { 
+import { 
     areAdjacent, 
     calculateReinforcements, 
     resolveCombat 
-} = require('./logic/gameLogic');
+} from './logic/gameLogic.js';
 
-const {
+import {
     getBotDeployment,
     getBotAttacks
-} = require('./logic/botLogic');
+} from './logic/botLogic.js';
 
-const {
+import {
     isMapConnected,
     validateCustomMap
-} = require('./logic/mapLogic');
+} from './logic/mapLogic.js';
 
-const {
+import {
     validateCivilization,
     validateTroopType
-} = require('./logic/entityValidators');
+} from './logic/entityValidators.js';
 
-const {
+import {
     getNextActivePlayer,
     checkVictoryCondition,
     executeBotTurn
-} = require('./logic/turnManager');
+} from './logic/turnManager.js';
 
-const {
+import {
     validateDeploymentAction,
     validateMoveAction
-} = require('./logic/actionValidators');
+} from './logic/actionValidators.js';
 
 console.log("=== INICIANDO PRUEBAS DE LÓGICA EN CARPETA LOGIC ===");
 
