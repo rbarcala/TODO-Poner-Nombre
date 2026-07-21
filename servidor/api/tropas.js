@@ -12,7 +12,7 @@ export const endpointsTropas = Router();
 // GET /api/tipos-tropas - Listar todos los tipos de tropas
 endpointsTropas.get("/", async (req, res) => {
   const tropas = await obtenerTiposTropas();
-  if (!tropas) return res.sendStatus(500);
+  if (!tropas) return res.status(500).json({ error: "Error al obtener tipos de tropas" });
   res.json(tropas);
 });
 
@@ -20,7 +20,7 @@ endpointsTropas.get("/", async (req, res) => {
 endpointsTropas.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const tropa = await obtenerTipoTropa(id);
-  if (!tropa) return res.sendStatus(404);
+  if (!tropa) return res.status(404).json({ error: "Tipo de tropa no encontrado" });
   res.json(tropa);
 });
 
@@ -29,7 +29,7 @@ endpointsTropas.post("/", async (req, res) => {
   const { tipo, descripcion, dado_min, dado_max, costo } = req.body;
 
   if (!tipo) {
-    return res.status(400).send("El tipo de tropa es obligatorio");
+    return res.status(400).json({ error: "El nombre del tipo de tropa es obligatorio" });
   }
 
   const nueva = await crearTipoTropa(
@@ -40,7 +40,7 @@ endpointsTropas.post("/", async (req, res) => {
     costo || 1
   );
 
-  if (!nueva) return res.sendStatus(500);
+  if (!nueva) return res.status(500).json({ error: "Error al crear el tipo de tropa" });
   res.status(201).json(nueva);
 });
 
@@ -58,7 +58,7 @@ endpointsTropas.put("/:id", async (req, res) => {
     costo
   );
 
-  if (!actualizada) return res.sendStatus(404);
+  if (!actualizada) return res.status(404).json({ error: "Tipo de tropa no encontrado o error al actualizar" });
   res.json(actualizada);
 });
 
@@ -66,6 +66,6 @@ endpointsTropas.put("/:id", async (req, res) => {
 endpointsTropas.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const eliminada = await borrarTipoTropa(id);
-  if (!eliminada) return res.sendStatus(404);
-  res.sendStatus(204);
+  if (!eliminada) return res.status(404).json({ error: "Tipo de tropa no encontrado o no se pudo eliminar" });
+  res.json({ message: "Tipo de tropa eliminado correctamente", id });
 });

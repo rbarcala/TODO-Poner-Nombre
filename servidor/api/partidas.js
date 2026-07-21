@@ -22,7 +22,7 @@ export const endpointsPartidas = Router();
 // GET /api/partidas - Listar partidas
 endpointsPartidas.get("/", async (req, res) => {
   const partidas = await obtenerPartidas();
-  if (!partidas) return res.sendStatus(500);
+  if (!partidas) return res.status(500).json({ error: "Error al obtener partidas" });
   res.json(partidas);
 });
 
@@ -30,7 +30,7 @@ endpointsPartidas.get("/", async (req, res) => {
 endpointsPartidas.get("/:id/estado", async (req, res) => {
   const id = parseInt(req.params.id);
   const estadoCompleto = await obtenerEstadoCompletoPartida(id);
-  if (!estadoCompleto) return res.sendStatus(404);
+  if (!estadoCompleto) return res.status(404).json({ error: "Partida no encontrada" });
   res.json(estadoCompleto);
 });
 
@@ -40,11 +40,10 @@ endpointsPartidas.post("/", async (req, res) => {
 
   let paisesIds = paises_ids;
 
-  // Si no especificó países, usamos los primeros disponibles de la BDD
   if (!paisesIds || !Array.isArray(paisesIds) || paisesIds.length === 0) {
     const todosPaises = await obtenerPaises();
     if (!todosPaises || todosPaises.length === 0) {
-      return res.status(400).send("No hay países registrados en la base de datos.");
+      return res.status(400).json({ error: "No hay países registrados en la base de datos." });
     }
     paisesIds = todosPaises.slice(0, 4).map(p => p.id);
   }
@@ -54,16 +53,14 @@ endpointsPartidas.post("/", async (req, res) => {
     ? terrenosCat.map(t => t.id) 
     : [1];
 
-  // 1. Generar mapa con mapLogic
   const numFilas = filas || 4;
   const numColumnas = columnas || 4;
   const mapaGenerado = generateMap(numFilas, numColumnas, paisesIds, terrenosIds);
 
-  // 2. Persistir en BDD
   const partidaCreada = await crearPartidaConMapa(nombre, paisesIds, mapaGenerado);
 
   if (!partidaCreada) {
-    return res.status(500).send("Error al crear la partida en base de datos.");
+    return res.status(500).json({ error: "Error al crear la partida en base de datos." });
   }
 
   const estadoCompleto = await obtenerEstadoCompletoPartida(partidaCreada.id);
@@ -76,24 +73,23 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   const { territorio_id, cantidad } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
-  if (!estado) return res.sendStatus(404);
+  if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
 
   const territorioTarget = estado.territorios.find(t => t.id === territorio_id);
-  if (!territorioTarget) return res.status(400).send("Territorio no encontrado.");
+  if (!territorioTarget) return res.status(400).json({ error: "Territorio no encontrado." });
 
   const activePlayerId = estado.partida.turno_actual;
   const validation = validateDeploymentAction(
     activePlayerId,
     estado.territorios,
     [{ territorio_id, cantidad }],
-    999 // Cantidad disponible simulada/permitida por turno
+    999
   );
 
   if (!validation.isValid) {
     return res.status(400).json({ errors: validation.errors });
   }
 
-  // Aplicar refuerzo
   const nuevasTropas = (territorioTarget.tropas_actuales || 1) + cantidad;
   await actualizarTerritorio(territorio_id, territorioTarget.pais_duenio_id, nuevasTropas);
 
@@ -107,7 +103,7 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
   const { origen_id, destino_id, tropas } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
-  if (!estado) return res.sendStatus(404);
+  if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
 
   const origen = estado.territorios.find(t => t.id === origen_id);
   const destino = estado.territorios.find(t => t.id === destino_id);
@@ -121,7 +117,6 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
     });
   }
 
-  // Transferir tropas
   await actualizarTerritorio(origen.id, origen.pais_duenio_id, origen.tropas_actuales - tropas);
   await actualizarTerritorio(destino.id, destino.pais_duenio_id, destino.tropas_actuales + tropas);
 
@@ -135,7 +130,7 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   const { origen_id, destino_id, tropas_atacantes } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
-  if (!estado) return res.sendStatus(404);
+  if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
 
   const origen = estado.territorios.find(t => t.id === origen_id);
   const destino = estado.territorios.find(t => t.id === destino_id);
@@ -146,7 +141,6 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
     return res.status(400).json({ errors: validation.errors });
   }
 
-  // Resolver combate
   const catalogTropas = await obtenerTiposTropas();
   const defaultTroop = (catalogTropas && catalogTropas.length > 0) ? catalogTropas[0] : { dado_min: 1, dado_max: 6 };
 
@@ -164,17 +158,14 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   const result = resolveCombat(attackerObj, defenderObj, terrainObj, attackingTroopsList, defendingTroopsList);
 
   if (result.attackerWins) {
-    // Conquista
     await actualizarTerritorio(destino.id, activePlayerId, tropas_atacantes);
     await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes);
   } else {
-    // Derrota atacante
     await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes);
   }
 
   const estadoPostCombate = await obtenerEstadoCompletoPartida(partidaId);
 
-  // Verificar si alguien ganó la partida
   const victory = checkVictoryCondition(estadoPostCombate.territorios, estadoPostCombate.paises);
   if (victory.isGameOver) {
     await actualizarEstadoPartida(partidaId, null, 'finalizada', victory.winnerCountryId);
@@ -193,26 +184,23 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
   const partidaId = parseInt(req.params.id);
 
   let estado = await obtenerEstadoCompletoPartida(partidaId);
-  if (!estado) return res.sendStatus(404);
+  if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
 
   const siguientePaisId = getNextActivePlayer(estado.paises, estado.partida.turno_actual);
   if (!siguientePaisId) {
-    return res.status(400).send("No se pudo determinar el siguiente jugador.");
+    return res.status(400).json({ error: "No se pudo determinar el siguiente jugador." });
   }
 
   await actualizarEstadoPartida(partidaId, siguientePaisId, 'en_curso');
   estado = await obtenerEstadoCompletoPartida(partidaId);
 
-  // Verificar si el siguiente jugador es un Bot / NPC
   const paisActivoObj = estado.paises.find(p => p.pais_id === siguientePaisId);
   let botLog = null;
 
-  // Si tiene agresividad asignada y es un Bot, ejecutamos su turno automáticamente
   if (paisActivoObj && paisActivoObj.agresividad > 0) {
     const catalogTropas = await obtenerTiposTropas();
     botLog = executeBotTurn(paisActivoObj, estado.territorios, estado.fronteras, estado.paises, catalogTropas || []);
 
-    // Aplicar territorios actualizados por el Bot a la BDD
     if (botLog.updatedTerritories) {
       for (const t of botLog.updatedTerritories) {
         await actualizarTerritorio(t.id, t.pais_duenio_id, t.tropas_actuales);
@@ -222,7 +210,6 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
     if (botLog.isGameOver) {
       await actualizarEstadoPartida(partidaId, null, 'finalizada', botLog.winnerCountryId);
     } else {
-      // Avanzar al siguiente tras el turno del bot
       const proximoPostBot = getNextActivePlayer(estado.paises, siguientePaisId);
       await actualizarEstadoPartida(partidaId, proximoPostBot, 'en_curso');
     }
@@ -241,6 +228,6 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
 endpointsPartidas.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const eliminada = await borrarPartida(id);
-  if (!eliminada) return res.sendStatus(404);
-  res.sendStatus(204);
+  if (!eliminada) return res.status(404).json({ error: "Partida no encontrada o no se pudo eliminar" });
+  res.json({ message: "Partida eliminada correctamente", id });
 });
