@@ -2,7 +2,7 @@
  * Módulo de Validación de Acciones de Juego (Despliegues, Movimientos y Ataques)
  */
 
-const { areAdjacent } = require('./gameLogic');
+import { areAdjacent } from './gameLogic.js';
 
 /**
  * Valida una acción de despliegue de tropas de refuerzo enviada por el cliente.
@@ -13,7 +13,7 @@ const { areAdjacent } = require('./gameLogic');
  * @param {number} availableReinforcements - Tropas de refuerzo disponibles calculadas para este turno
  * @returns {Object} { isValid: boolean, errors: Array<string> }
  */
-function validateDeploymentAction(activePlayerId, playerTerritories, deployments, availableReinforcements) {
+export function validateDeploymentAction(activePlayerId, playerTerritories, deployments, availableReinforcements) {
     const errors = [];
     
     if (!deployments || !Array.isArray(deployments) || deployments.length === 0) {
@@ -21,7 +21,11 @@ function validateDeploymentAction(activePlayerId, playerTerritories, deployments
         return { isValid: false, errors };
     }
 
-    const playerTerritoryIds = new Set(playerTerritories.map(t => t.id));
+    const playerTerritoryIds = new Set(
+        playerTerritories
+            .filter(t => t.pais_duenio_id === activePlayerId)
+            .map(t => t.id)
+    );
     let totalDeployed = 0;
 
     deployments.forEach((dep, idx) => {
@@ -60,7 +64,7 @@ function validateDeploymentAction(activePlayerId, playerTerritories, deployments
  * @param {Array<Object>} fronteras - Listado de fronteras/aristas del grafo de la partida
  * @returns {Object} { isValid: boolean, isAttack: boolean, errors: Array<string> }
  */
-function validateMoveAction(activePlayerId, originTerritory, destinationTerritory, troopsToMove, fronteras) {
+export function validateMoveAction(activePlayerId, originTerritory, destinationTerritory, troopsToMove, fronteras) {
     const errors = [];
 
     if (!originTerritory) {
@@ -78,10 +82,11 @@ function validateMoveAction(activePlayerId, originTerritory, destinationTerritor
     }
 
     // 2. Validar que queden tropas de resguardo en el origen (al menos 1 debe quedarse)
+    const tropasActuales = originTerritory.tropas_actuales || 1;
     if (!Number.isInteger(troopsToMove) || troopsToMove <= 0) {
         errors.push("La cantidad de tropas a mover debe ser un número entero mayor a 0.");
-    } else if (originTerritory.tropas_actuales - troopsToMove < 1) {
-        errors.push(`No puedes mover ${troopsToMove} tropas. Debes dejar al menos 1 tropa custodiando el territorio origen (actuales: ${originTerritory.tropas_actuales}).`);
+    } else if (tropasActuales - troopsToMove < 1) {
+        errors.push(`No puedes mover ${troopsToMove} tropas. Debes dejar al menos 1 tropa custodiando el territorio origen (actuales: ${tropasActuales}).`);
     }
 
     // 3. Validar adyacencia (grafo conectado)
@@ -90,8 +95,7 @@ function validateMoveAction(activePlayerId, originTerritory, destinationTerritor
         errors.push(`No existe una conexión directa (frontera) entre el territorio origen (ID: ${originTerritory.id}) y el destino (ID: ${destinationTerritory.id}).`);
     }
 
-    // Determinar si la acción es un ataque o un traslado amistoso
-    // Un ataque es cuando el dueño del destino es nulo (neutral) o pertenece a otro bando.
+    // Determinar si es un ataque o un traslado amistoso
     const isAttack = destinationTerritory.pais_duenio_id !== activePlayerId;
 
     return {
@@ -100,8 +104,3 @@ function validateMoveAction(activePlayerId, originTerritory, destinationTerritor
         errors
     };
 }
-
-module.exports = {
-    validateDeploymentAction,
-    validateMoveAction
-};

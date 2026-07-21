@@ -12,6 +12,9 @@ export const endpointsPaises = Router();
 
 endpointsPaises.get("/", async (req, res) => {
   const paises = await obtenerPaises();
+  if (!paises) {
+    return res.status(500).json({ error: "Error al obtener países" });
+  }
   res.json(paises);
 });
 
@@ -21,8 +24,7 @@ endpointsPaises.get("/:indice", async (req, res) => {
   const pais = await obtenerPais(indice);
 
   if (pais === undefined) {
-    res.sendStatus(404);
-    return;
+    return res.status(404).json({ error: "País no encontrado" });
   }
 
   res.json(pais);
@@ -35,15 +37,13 @@ endpointsPaises.put("/:indice", async (req, res) => {
     req.body.economia === undefined ||
     !Number.isInteger(req.body.economia)
   ) {
-    res.status(400).send("Economia not set");
-    return;
+    return res.status(400).json({ error: "Economía no especificada o no es un número entero" });
   }
 
   const terreno = await obtenerTipoTerrenoPorNombre(req.body.terreno);
 
   if (terreno === undefined) {
-    res.sendStatus(404);
-    return;
+    return res.status(404).json({ error: "Tipo de terreno no encontrado" });
   }
 
   const updated = await editarPais(
@@ -57,11 +57,10 @@ endpointsPaises.put("/:indice", async (req, res) => {
   );
 
   if (!updated) {
-    res.sendStatus(500);
-    return;
+    return res.status(500).json({ error: "Error al actualizar el país" });
   }
 
-  res.sendStatus(200);
+  res.json({ message: "País actualizado correctamente" });
 });
 
 endpointsPaises.patch("/:indice", async (req, res) => {
@@ -71,15 +70,13 @@ endpointsPaises.patch("/:indice", async (req, res) => {
     req.body.economia !== undefined &&
     !Number.isInteger(req.body.economia)
   ) {
-    res.status(400).send("Economia no es un número");
-    return;
+    return res.status(400).json({ error: "Economía no es un número entero" });
   }
 
   let pais = await obtenerPais(indice);
 
   if (pais === undefined) {
-    res.sendStatus(404);
-    return;
+    return res.status(404).json({ error: "País no encontrado" });
   }
 
   if (req.body.nombre !== undefined) pais.nombre = req.body.nombre;
@@ -96,8 +93,7 @@ endpointsPaises.patch("/:indice", async (req, res) => {
   }
 
   if (terreno === undefined) {
-    res.sendStatus(404);
-    return;
+    return res.status(404).json({ error: "Tipo de terreno no encontrado" });
   }
 
   pais.resistencia_terreno_id = terreno.id;
@@ -113,11 +109,10 @@ endpointsPaises.patch("/:indice", async (req, res) => {
   );
 
   if (!updated) {
-    res.sendStatus(500);
-    return;
+    return res.status(500).json({ error: "Error al actualizar el país" });
   }
 
-  res.sendStatus(200);
+  res.json({ message: "País actualizado correctamente" });
 });
 
 endpointsPaises.delete("/:indice", async (req, res) => {
@@ -126,15 +121,13 @@ endpointsPaises.delete("/:indice", async (req, res) => {
   const pais = await obtenerPais(indice);
 
   if (pais === undefined) {
-    res.sendStatus(404);
-    return;
+    return res.status(404).json({ error: "País no encontrado" });
   }
 
   const eliminado = await borrarPais(indice);
 
   if (!eliminado) {
-    res.sendStatus(500);
-    return;
+    return res.status(500).json({ error: "Error al eliminar el país" });
   }
 
   res.json(pais);
@@ -145,15 +138,13 @@ endpointsPaises.post("/", async (req, res) => {
     req.body.economia === undefined ||
     !Number.isInteger(req.body.economia)
   ) {
-    res.status(400).send("Economia not set");
-    return;
+    return res.status(400).json({ error: "Economía no especificada o no es un número entero" });
   }
 
   const terreno = await obtenerTipoTerrenoPorNombre(req.body.terreno);
 
   if (terreno === undefined) {
-    res.sendStatus(404);
-    return;
+    return res.status(404).json({ error: "Tipo de terreno no encontrado" });
   }
 
   const created = await crearPais(
@@ -166,16 +157,8 @@ endpointsPaises.post("/", async (req, res) => {
   );
 
   if (!created) {
-    res.sendStatus(500);
-    return;
+    return res.status(500).json({ error: "Error al crear el país" });
   }
 
-  res.status(201).json({
-    nombre: req.body.nombre,
-    color_hex: req.body.color_hex,
-    economia: req.body.economia,
-    tecnologia: req.body.tecnologia,
-    agresividad: req.body.agresividad,
-    terreno: req.body.terreno,
-  });
+  res.status(201).json(created);
 });
