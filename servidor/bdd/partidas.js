@@ -1,5 +1,33 @@
 import { pool } from '../pool.js';
 
+const obtenerTropaBase = async (client) => {
+    const resultado = await client.query(`
+        INSERT INTO tropas (id_tipo_tropa)
+        SELECT id FROM tipos_de_tropas ORDER BY id ASC LIMIT 1
+        ON CONFLICT (id_tipo_tropa)
+        DO UPDATE SET id_tipo_tropa = EXCLUDED.id_tipo_tropa
+        RETURNING id
+    `);
+
+    return resultado.rows[0]?.id;
+};
+
+const guardarTropasEstacionadas = async (client, territorioId, cantidad) => {
+    await client.query('DELETE FROM tropas_estacionadas WHERE id_territorio = $1', [territorioId]);
+
+    if (cantidad <= 0) return;
+
+    const tropaId = await obtenerTropaBase(client);
+    if (!tropaId) {
+        throw new Error('No hay tipos de tropas disponibles para asignar al territorio');
+    }
+
+    await client.query(`
+        INSERT INTO tropas_estacionadas (id_territorio, id_tropa)
+        SELECT $1, $2 FROM generate_series(1, $3)
+    `, [territorioId, tropaId, cantidad]);
+};
+
 export const obtenerPartidas = async () => {
     try {
         const query = `
@@ -58,6 +86,7 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
                 [partida.id, t.nombre || `Sector (${t.x},${t.y})`, t.x, t.y, t.tipo_terreno_id, t.pais_duenio_id]
             );
             const territorioGuardado = resTerritorio.rows[0];
+            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales || 3);
             idMap.set(t.id, territorioGuardado.id);
         }
 
@@ -137,17 +166,29 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
 };
 
 export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasActuales) => {
+    const client = await pool.connect();
     try {
+        await client.query('BEGIN');
         const query = `
             UPDATE territorios 
             SET pais_duenio_id = $1 
             WHERE id = $2 
             RETURNING *
         `;
-        const resultado = await pool.query(query, [paisDuenioId, territorioId]);
+        const resultado = await client.query(query, [paisDuenioId, territorioId]);
+        if (resultado.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return undefined;
+        }
+
+        await guardarTropasEstacionadas(client, territorioId, tropasActuales);
+        await client.query('COMMIT');
         return resultado.rows[0];
     } catch (error) {
+        await client.query('ROLLBACK');
         return undefined;
+    } finally {
+        client.release();
     }
 };
 
