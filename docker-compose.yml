@@ -8,6 +8,11 @@ services:
       - ./app:/app
       - /app/node_modules
     command: sh -c "npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css && (npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css --watch --poll & npx http-server -p 8080 -c-1)"
+
+  servidor:
+    build:
+      context: ./servidor
+    ports:
       - "8000:3000"
     environment:
       DB_HOST: "bdd"
@@ -28,3 +33,14 @@ services:
       - ./data:/var/lib/postgresql
       - ./01_esquema_bdd.sql:/docker-entrypoint-initdb.d/01_esquema_bdd.sql:ro
       - ./02_seeds.sql:/docker-entrypoint-initdb.d/02_seeds.sql:ro
+  seed:
+    image: postgres:18-alpine
+    depends_on:
+      - bdd
+    volumes:
+      - ./02_seeds.sql:/seeds/02_seeds.sql:ro
+    environment:
+      PGPASSWORD: "contraseña"
+    command: >
+      sh -c "sleep 3 &&
+      psql -h bdd -U usuario -d bdd -f /seeds/02_seeds.sql"
