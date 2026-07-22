@@ -76,7 +76,8 @@ CREATE TABLE "tipos_de_tropas"(
     "tipo" VARCHAR(50) NOT NULL UNIQUE,
     "descripcion" TEXT NULL,
     "dado_min" INTEGER NULL,
-    "dado_max" INTEGER NULL
+    "dado_max" INTEGER NULL,
+    "costo" INTEGER NULL DEFAULT 1
 );
 
 CREATE TABLE "tropas"(

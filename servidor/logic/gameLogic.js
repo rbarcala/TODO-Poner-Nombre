@@ -11,7 +11,7 @@
  * @param {Array<Object>} fronteras - Listado de aristas [{ id_territorio_origen, id_territorio_destino }]
  * @returns {boolean} True si hay una frontera/adyacencia entre ambos
  */
-function areAdjacent(t1, t2, fronteras) {
+export function areAdjacent(t1, t2, fronteras) {
     if (!t1 || !t2 || !fronteras) return false;
     if (t1.id === t2.id) return false;
     
@@ -29,7 +29,7 @@ function areAdjacent(t1, t2, fronteras) {
  * @param {number} economia - Nivel de economía de la civilización (1 a 10)
  * @returns {number} Cantidad de tropas generadas
  */
-function calculateReinforcements(territoriesCount, economia) {
+export function calculateReinforcements(territoriesCount, economia) {
     const base = Math.max(3, Math.floor(territoriesCount / 3));
     const bonoEconomia = economia || 0;
     return base + bonoEconomia;
@@ -42,7 +42,7 @@ function calculateReinforcements(territoriesCount, economia) {
  * @param {number} max - Máximo valor del dado (dado_max)
  * @returns {number} Resultado del dado
  */
-function rollDie(min, max) {
+export function rollDie(min, max) {
     const dadoMin = typeof min === 'number' ? min : 1;
     const dadoMax = typeof max === 'number' ? max : 6;
     return Math.floor(Math.random() * (dadoMax - dadoMin + 1)) + dadoMin;
@@ -58,7 +58,7 @@ function rollDie(min, max) {
  * @param {Array<Object>} defendingTroops - Lista de tropas defensoras [ { dado_min, dado_max } ]
  * @returns {Object} Resultado del combate
  */
-function resolveCombat(attackerCountry, defenderCountry, terrain, attackingTroops, defendingTroops) {
+export function resolveCombat(attackerCountry, defenderCountry, terrain, attackingTroops, defendingTroops) {
     if (attackerCountry && defenderCountry && attackerCountry.id === defenderCountry.id) {
         throw new Error("No puedes atacar un territorio que pertenece a tu misma civilización.");
     }
@@ -140,10 +140,3 @@ function resolveCombat(attackerCountry, defenderCountry, terrain, attackingTroop
         defenderHasResistance
     };
 }
-
-module.exports = {
-    areAdjacent,
-    calculateReinforcements,
-    rollDie,
-    resolveCombat
-};

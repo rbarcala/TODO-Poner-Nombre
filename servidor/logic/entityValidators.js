@@ -10,7 +10,7 @@
  * @param {Array<Object>} [terrainTypes] - Catálogo opcional de terrenos válidos para validar FK
  * @returns {Object} { isValid: boolean, errors: Array<string> }
  */
-function validateCivilization(civilization, terrainTypes) {
+export function validateCivilization(civilization, terrainTypes) {
     const errors = [];
     
     if (!civilization) {
@@ -44,7 +44,7 @@ function validateCivilization(civilization, terrainTypes) {
     }
     
     // 4. Validar Tropas Iniciales
-    if (!Number.isInteger(tropas) || tropas < 0) {
+    if (tropas !== undefined && tropas !== null && (!Number.isInteger(tropas) || tropas < 0)) {
         errors.push("La cantidad inicial de tropas debe ser un número entero no negativo (mínimo 0).");
     }
     
@@ -73,7 +73,7 @@ function validateCivilization(civilization, terrainTypes) {
  * @param {Object} troopType - Datos del tipo de tropa a validar
  * @returns {Object} { isValid: boolean, errors: Array<string> }
  */
-function validateTroopType(troopType) {
+export function validateTroopType(troopType) {
     const errors = [];
     
     if (!troopType) {
@@ -114,8 +114,3 @@ function validateTroopType(troopType) {
         errors
     };
 }
-
-module.exports = {
-    validateCivilization,
-    validateTroopType
-};

@@ -13,3 +13,9 @@ INSERT INTO paises (nombre, color_hex, economia, tecnologia, agresividad, resist
 ('Nación Redonda', '#FF0000', 4, 5, 9, 2),
 ('Imperio Tux', '#000000', 8, 10, 1, 3),
 ('Uruguay', '#0038A8', 9, 7, 4, 3);
+
+-- 3. Tipos de Tropas
+INSERT INTO tipos_de_tropas (tipo, descripcion, dado_min, dado_max, costo) VALUES
+('Infantería', 'Tropa estándar versátil', 1, 6, 1),
+('Caballería', 'Tropa rápida de asalto', 2, 6, 2),
+('Artillería', 'Tropa de ataque pesado', 1, 8, 3);
