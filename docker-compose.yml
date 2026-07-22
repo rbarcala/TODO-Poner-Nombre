@@ -1,8 +1,13 @@
 services:
-  app:
-    build: ./servidor
-    image: backend_paises
+  frontend:
+    build: 
+      context: ./app
     ports:
+      - "8080:8080"
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+    command: sh -c "npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css && (npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css --watch --poll & npx http-server -p 8080 -c-1)"
       - "8000:3000"
     environment:
       DB_HOST: "bdd"
