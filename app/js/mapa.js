@@ -84,15 +84,34 @@ function dibujarGrafo(territorios, fronteras) {
         const centroY = (territorio.coord_y * ESCALA) + OFFSET_Y;
 
         const grupo = document.createElementNS(SVG_NS, 'g');
-        grupo.classList.add('cursor-pointer', 'transition-transform', 'hover:scale-110');
+        grupo.classList.add('cursor-pointer');
+
+        const areaHover = document.createElementNS(SVG_NS, 'circle');
+        areaHover.setAttribute('cx', centroX);
+        areaHover.setAttribute('cy', centroY);
+        areaHover.setAttribute('r', '55');
+        areaHover.setAttribute('fill', 'transparent');
+
+        const bordeTerreno = document.createElementNS(SVG_NS, 'circle');
+        bordeTerreno.setAttribute('cx', centroX);
+        bordeTerreno.setAttribute('cy', centroY);
+        bordeTerreno.setAttribute('r', '43');
+        bordeTerreno.setAttribute('fill', territorio.terreno_color || '#0f172a');
+        bordeTerreno.style.transition = 'r 150ms ease';
+
+        const separadorBorde = document.createElementNS(SVG_NS, 'circle');
+        separadorBorde.setAttribute('cx', centroX);
+        separadorBorde.setAttribute('cy', centroY);
+        separadorBorde.setAttribute('r', '37');
+        separadorBorde.setAttribute('fill', '#0f172a');
+        separadorBorde.style.transition = 'r 150ms ease';
         
         const circulo = document.createElementNS(SVG_NS, 'circle');
         circulo.setAttribute('cx', centroX);
         circulo.setAttribute('cy', centroY);
-        circulo.setAttribute('r', '35'); 
+        circulo.setAttribute('r', '33'); 
         circulo.setAttribute('fill', territorio.pais_duenio_color || '#94a3b8'); 
-        circulo.setAttribute('stroke', '#0f172a');
-        circulo.setAttribute('stroke-width', '4');
+        circulo.style.transition = 'r 150ms ease, fill 150ms ease';
 
         const textoTropas = document.createElementNS(SVG_NS, 'text');
         textoTropas.setAttribute('x', centroX);
@@ -103,10 +122,13 @@ function dibujarGrafo(territorios, fronteras) {
         textoTropas.setAttribute('font-weight', 'bold');
         textoTropas.setAttribute('font-family', 'sans-serif');
         textoTropas.setAttribute('font-size', '18px');
+        textoTropas.style.pointerEvents = 'none';
         textoTropas.textContent = territorio.tropas_actuales;
 
         grupo.addEventListener("mouseenter", () => {
-            circulo.setAttribute("fill", "#4F4F4F");
+            bordeTerreno.setAttribute("r", "53");
+            separadorBorde.setAttribute("r", "47");
+            circulo.setAttribute("r", "43");
             tooltip.innerHTML = `
                 <strong>País: ${territorio.pais_duenio_nombre || 'Neutral'}</strong><br>
                 Tipo: ${territorio.tipo_terreno_nombre}
@@ -115,11 +137,16 @@ function dibujarGrafo(territorios, fronteras) {
         });
 
         grupo.addEventListener("mouseleave", () => {
-            circulo.setAttribute("fill", territorio.pais_duenio_color || "#94a3b8");
+            bordeTerreno.setAttribute("r", "43");
+            separadorBorde.setAttribute("r", "37");
+            circulo.setAttribute("r", "33");
             tooltip.innerHTML = "";
             tooltip.classList.add("hidden");
         });
 
+        grupo.appendChild(areaHover);
+        grupo.appendChild(bordeTerreno);
+        grupo.appendChild(separadorBorde);
         grupo.appendChild(circulo);
         grupo.appendChild(textoTropas);
         svg.appendChild(grupo);
