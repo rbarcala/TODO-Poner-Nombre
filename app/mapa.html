@@ -12,16 +12,32 @@
     <svg id="lienzo-mapa" class="w-full h-full absolute top-0 left-0 z-10"></svg>
 
     <!--Interfaz por encima del mapa-->
-    <div class="absolute top-4 left-4 z-20 bg-slate-950/80 p-4 rounded border border-slate-700">
+    <!-- <div class="absolute top-4 left-4 z-20 bg-slate-950/80 p-4 rounded border border-slate-700">
         <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
         <p class="text-sm text-slate-300">Selecciona un territorio para accionar</p>
-    </div>
+    </div> -->
 
-    <!--Hover sobre los territorios-->
     <div id="tooltip"
         style="background-color: #F54927; color: #000000; border-color: #B93A20; z-index: 9999;"
         class="absolute hidden pointer-events-none z-[9999]
         text-sm p-2 rounded border shadow-lg empty:hidden">
+    </div>
+
+    <div id="panel-acciones" 
+         style="z-index: 999; display: none; position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); background-color: rgba(15, 23, 42, 0.95); border: 1px solid #334155; padding: 16px; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); flex-direction: column; align-items: center; gap: 12px; color: white; min-width: 300px; font-family: sans-serif;">
+        
+        <div style="text-align: center;">
+            <h3 id="panel-titulo" style="font-weight: bold; font-size: 18px; color: #F4A60B; margin: 0 0 4px 0;">Territorio</h3>
+            <p id="panel-subtitulo" style="font-size: 12px; color: #94a3b8; margin: 0;">Elige una acción</p>
+        </div>
+        
+        <div style="display: flex; gap: 8px; width: 100%; margin-top: 10px; margin-bottom: 10px;">
+            <button id="btn-reforzar" style="flex: 1; background-color: #F5276C; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">Reforzar</button>
+            <button id="btn-mover" style="flex: 1; background-color: #F4A60B; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">Mover</button>
+            <button id="btn-atacar" style="flex: 1; background-color: #F54927; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">Atacar</button>
+        </div>
+        
+        <span style="font-size: 11px; color: #64748b;">Presioná <kbd style="background-color: #1e293b; padding: 2px 4px; border-radius: 4px;">ESC</kbd> o clic de nuevo para deseleccionar</span>
     </div>
 
     <script src="./js/mapa.js"></script>
