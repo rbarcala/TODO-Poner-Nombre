@@ -3,3 +3,5 @@ npm-debug.log
 .git
 README.md
 esquema_bdd.sql
+docker-compose.override.yml
+app/css/output.css

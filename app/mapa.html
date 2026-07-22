@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de la Partida</title>
+    <link href="./css/output.css" rel="stylesheet">
+</head>
+<body class="h-screen w-screen bg-slate-900 overflow-hidden relative text-white">
+
+    <!--Para inyectar circulos y lineas (territorios y fronteras) desde js-->
+    <svg id="lienzo-mapa" class="w-full h-full absolute top-0 left-0 z-10"></svg>
+
+    <!--Interfaz por encima del mapa-->
+    <div class="absolute top-4 left-4 z-20 bg-slate-950/80 p-4 rounded border border-slate-700">
+        <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
+        <p class="text-sm text-slate-300">Selecciona un territorio para accionar</p>
+    </div>
+
+    <!--Hover sobre los territorios-->
+    <div id="tooltip"
+        style="background-color: #F54927; color: #000000; border-color: #B93A20; z-index: 9999;"
+        class="absolute hidden pointer-events-none z-[9999]
+        text-sm p-2 rounded border shadow-lg empty:hidden">
+    </div>
+
+    <script src="./js/mapa.js"></script>
+</body>
+</html>
