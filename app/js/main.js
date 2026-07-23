@@ -94,13 +94,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedCountries = Array.from(document.querySelectorAll('.country-checkbox:checked'))
                 .map((checkbox) => Number(checkbox.value));
 
-            if (selectedCountries.length === 0) {
-                alert('Seleccioná al menos un país para la partida.');
+            if (selectedCountries.length < 2) {
+                alert('Debés seleccionar al menos 2 países para que peleen entre sí.');
                 return;
             }
 
             if (selectedCountries.length > 4) {
-                alert('Podés seleccionar hasta 4 países.');
+                alert('Podés seleccionar entre 2 y 4 países.');
                 return;
             }
 
