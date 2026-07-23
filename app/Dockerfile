@@ -8,4 +8,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css && npx http-server . -p ${PORT:-8080}"]
+CMD ["sh", "-c", "npx http-server . -p ${PORT:-8080} -c-1"]
