@@ -252,8 +252,22 @@ async function procesarAtaque(territorioDestino) {
         const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
         estadoJuego = resultadoAtaque.estado;
         
+        const res = resultadoAtaque.combatResult;
+        if (res) {
+            const tiradasAtaque = res.attackRolls ? res.attackRolls.join(", ") : "";
+            const tiradasDefensa = res.defenseRolls ? res.defenseRolls.join(", ") : "";
+            
+            const modAtkStr = res.modAttackUsed !== 1 ? ` (Mod. Terreno: x${res.modAttackUsed})` : "";
+            const modDefStr = res.modDefenseUsed !== 1 ? ` (Mod. Terreno: x${res.modDefenseUsed})` : "";
+
+            const textoResultado = res.attackerWins
+                ? `⚔️ ¡VICTORIA DE ATAQUE!\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\n¡Conquistaste el territorio!`
+                : `🛡️ DERROTA EN EL ATAQUE\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nEl defensor repelió el asalto.`;
+            alert(textoResultado);
+        }
+
         if (resultadoAtaque.victory?.isGameOver) {
-            alert(`¡Partida Finalizada! Ganó el país ID: ${resultadoAtaque.victory.winnerCountryId}`);
+            alert(`🏆 ¡PARTIDA FINALIZADA!\n\nGanó la civilización ID: ${resultadoAtaque.victory.winnerCountryId}`);
         }
     } catch (error) {
         console.error("Error al atacar:", error);
@@ -264,9 +278,13 @@ async function procesarAtaque(territorioDestino) {
 }
 
 //LLAMADAS A LA API (FETCH)
+const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+    ? 'http://localhost:8000'
+    : window.location.origin.replace('frontend', 'servidor');
+
 async function cargarYRenderizarMapa(partidaId) {
     try {
-        const respuesta = await fetch(`http://localhost:8000/api/partidas/${partidaId}/estado`);
+        const respuesta = await fetch(`${API_BASE}/api/partidas/${partidaId}/estado`);
         if (!respuesta.ok) throw new Error(`Error de red: ${respuesta.status}`);
         
         estadoJuego = await respuesta.json();
@@ -278,7 +296,7 @@ async function cargarYRenderizarMapa(partidaId) {
 }
 
 async function apiReforzarTerritorio(idPartida, territorioId) {
-    const respuesta = await fetch(`http://localhost:8000/api/partidas/${idPartida}/desplegar`, {
+    const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/desplegar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ territorio_id: territorioId })
@@ -287,7 +305,7 @@ async function apiReforzarTerritorio(idPartida, territorioId) {
 }
 
 async function apiMoverTropas(idPartida, origenId, destinoId, cantidad) {
-    const respuesta = await fetch(`http://localhost:8000/api/partidas/${idPartida}/mover`, {
+    const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/mover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas: cantidad })
@@ -296,7 +314,7 @@ async function apiMoverTropas(idPartida, origenId, destinoId, cantidad) {
 }
 
 async function apiAtacar(idPartida, origenId, destinoId, cantidad) {
-    const respuesta = await fetch(`http://localhost:8000/api/partidas/${idPartida}/atacar`, {
+    const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/atacar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas_atacantes: cantidad })
