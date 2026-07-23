@@ -1,12 +1,47 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-const ESCALA = 150; 
+const ESCALA = 150;
 const OFFSET_X = 100;
 const OFFSET_Y = 100;
+let ultimoMapa = null;
+
+function aplicarTema(theme) {
+    const body = document.body;
+    const button = document.getElementById('theme-toggle');
+
+    body.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+    body.style.backgroundColor = theme === 'light' ? '#c79b73' : '#0f172a';
+
+    if (button) {
+        const icon = document.getElementById('theme-icon');
+        if (icon) {
+            icon.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+        button.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+    }
+
+    if (ultimoMapa) {
+        dibujarGrafo(ultimoMapa.territorios, ultimoMapa.fronteras);
+    }
+
+    localStorage.setItem('mapa-theme', theme);
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     const parametros = new URLSearchParams(window.location.search);
     const partidaId = parametros.get('id');
+    const themeToggle = document.getElementById('theme-toggle');
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.body.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+            const nextTheme = currentTheme === 'light' ? 'dark' : 'light';
+            aplicarTema(nextTheme);
+        });
+    }
+
+    const savedTheme = localStorage.getItem('mapa-theme');
+    aplicarTema(savedTheme === 'light' ? 'light' : 'dark');
 
     if (partidaId) {
         cargarYRenderizarMapa(partidaId);
@@ -39,23 +74,24 @@ function dibujarGrafo(territorios, fronteras) {
     const svg = document.getElementById('lienzo-mapa');
     svg.innerHTML = ''; 
     const tooltip = document.getElementById("tooltip");
+    ultimoMapa = { territorios, fronteras };
 
-    svg.addEventListener("mousemove", (event) => {
+    svg.onmousemove = (event) => {
         tooltip.style.left = `${event.clientX + 15}px`;
         tooltip.style.top = `${event.clientY + 15}px`;
-    });
+    };
 
-    //Calculo dinamico del ViewBox para hacerlo responsive
-    let maxCoordX = 0;
-    let maxCoordY = 0;
+    //Calculo dinamico del ViewBox para centrar el contenido dentro de la pantalla
+    const coordXValues = territorios.map(t => t.coord_x);
+    const coordYValues = territorios.map(t => t.coord_y);
 
-    territorios.forEach(t => {
-        if (t.coord_x > maxCoordX) maxCoordX = t.coord_x;
-        if (t.coord_y > maxCoordY) maxCoordY = t.coord_y;
-    });
+    const minCoordX = Math.min(...coordXValues);
+    const minCoordY = Math.min(...coordYValues);
+    const maxCoordX = Math.max(...coordXValues);
+    const maxCoordY = Math.max(...coordYValues);
 
-    const anchoTotal = (maxCoordX * ESCALA) + (OFFSET_X * 2);
-    const altoTotal = (maxCoordY * ESCALA) + (OFFSET_Y * 2);
+    const anchoTotal = Math.max(ESCALA, (maxCoordX - minCoordX) * ESCALA) + (OFFSET_X * 2);
+    const altoTotal = Math.max(ESCALA, (maxCoordY - minCoordY) * ESCALA) + (OFFSET_Y * 2);
 
     svg.setAttribute('viewBox', `0 0 ${anchoTotal} ${altoTotal}`);
 
@@ -66,12 +102,12 @@ function dibujarGrafo(territorios, fronteras) {
 
         if (origen && destino) {
             const linea = document.createElementNS(SVG_NS, 'line');
-            linea.setAttribute('x1', (origen.coord_x * ESCALA) + OFFSET_X);
-            linea.setAttribute('y1', (origen.coord_y * ESCALA) + OFFSET_Y);
-            linea.setAttribute('x2', (destino.coord_x * ESCALA) + OFFSET_X);
-            linea.setAttribute('y2', (destino.coord_y * ESCALA) + OFFSET_Y);
+            linea.setAttribute('x1', ((origen.coord_x - minCoordX) * ESCALA) + OFFSET_X);
+            linea.setAttribute('y1', ((origen.coord_y - minCoordY) * ESCALA) + OFFSET_Y);
+            linea.setAttribute('x2', ((destino.coord_x - minCoordX) * ESCALA) + OFFSET_X);
+            linea.setAttribute('y2', ((destino.coord_y - minCoordY) * ESCALA) + OFFSET_Y);
             
-            linea.setAttribute('stroke', '#475569'); 
+            linea.setAttribute('stroke', getComputedStyle(document.body).getPropertyValue('--line-stroke').trim() || '#475569'); 
             linea.setAttribute('stroke-width', '4');
             
             svg.appendChild(linea);
@@ -80,8 +116,8 @@ function dibujarGrafo(territorios, fronteras) {
 
     //Dibujar territorios
     territorios.forEach(territorio => {
-        const centroX = (territorio.coord_x * ESCALA) + OFFSET_X;
-        const centroY = (territorio.coord_y * ESCALA) + OFFSET_Y;
+        const centroX = ((territorio.coord_x - minCoordX) * ESCALA) + OFFSET_X;
+        const centroY = ((territorio.coord_y - minCoordY) * ESCALA) + OFFSET_Y;
 
         const grupo = document.createElementNS(SVG_NS, 'g');
         grupo.classList.add('cursor-pointer');
@@ -103,7 +139,8 @@ function dibujarGrafo(territorios, fronteras) {
         separadorBorde.setAttribute('cx', centroX);
         separadorBorde.setAttribute('cy', centroY);
         separadorBorde.setAttribute('r', '37');
-        separadorBorde.setAttribute('fill', '#0f172a');
+        const fondoActual = document.body.getAttribute('data-theme') === 'light' ? '#c79b73' : '#0f172a';
+        separadorBorde.setAttribute('fill', fondoActual);
         separadorBorde.style.transition = 'r 150ms ease';
         
         const circulo = document.createElementNS(SVG_NS, 'circle');

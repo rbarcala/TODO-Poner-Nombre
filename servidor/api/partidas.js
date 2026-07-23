@@ -53,8 +53,8 @@ endpointsPartidas.post("/", async (req, res) => {
     ? terrenosCat.map(t => t.id) 
     : [1];
 
-  const numFilas = filas || 4;
-  const numColumnas = columnas || 4;
+  const numFilas = Number.isInteger(filas) && filas >= 2 ? filas : undefined;
+  const numColumnas = Number.isInteger(columnas) && columnas >= 2 ? columnas : undefined;
   const mapaGenerado = generateMap(numFilas, numColumnas, paisesIds, terrenosIds);
 
   const partidaCreada = await crearPartidaConMapa(nombre, paisesIds, mapaGenerado);

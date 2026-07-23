@@ -5,17 +5,78 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mapa de la Partida</title>
     <link href="./css/output.css" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            transition: background-color 180ms ease, color 180ms ease;
+            background-color: #0f172a;
+            color: #f8fafc;
+            --panel-bg: rgba(2, 6, 23, 0.82);
+            --panel-border: rgba(148, 163, 184, 0.35);
+            --panel-text: #f8fafc;
+            --panel-muted: #cbd5e1;
+            --line-stroke: #475569;
+            --neutral-fill: #94a3b8;
+        }
+
+        body[data-theme="dark"] {
+            color-scheme: dark;
+            background-color: #0f172a;
+            color: #f8fafc;
+            --panel-bg: rgba(2, 6, 23, 0.82);
+            --panel-border: rgba(148, 163, 184, 0.35);
+            --panel-text: #f8fafc;
+            --panel-muted: #cbd5e1;
+            --line-stroke: #475569;
+            --neutral-fill: #94a3b8;
+        }
+
+        body[data-theme="light"] {
+            color-scheme: light;
+            background-color: #c79b73;
+            color: #3f2b1d;
+            --panel-bg: rgba(255, 247, 237, 0.86);
+            --panel-border: rgba(120, 53, 15, 0.25);
+            --panel-text: #3f2b1d;
+            --panel-muted: #5a3821;
+            --line-stroke: #8b5e3c;
+            --neutral-fill: #e7d1b8;
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-color: var(--panel-border);
+            color: var(--panel-text);
+        }
+
+        .panel-muted {
+            color: var(--panel-muted);
+        }
+
+        .theme-toggle {
+            background-color: var(--panel-bg);
+            color: var(--panel-text);
+            border-color: var(--panel-border);
+        }
+    </style>
 </head>
-<body class="h-screen w-screen bg-slate-900 overflow-hidden relative text-white">
+<body class="h-screen w-screen overflow-hidden relative" data-theme="dark">
 
     <!--Para inyectar circulos y lineas (territorios y fronteras) desde js-->
-    <svg id="lienzo-mapa" class="w-full h-full absolute top-0 left-0 z-10"></svg>
+    <svg id="lienzo-mapa" class="absolute inset-0 z-10 w-full h-full"></svg>
 
     <!--Interfaz por encima del mapa-->
-    <div class="absolute top-4 left-4 z-20 bg-slate-950/80 p-4 rounded border border-slate-700">
+    <div class="panel absolute top-4 left-4 z-20 p-4 rounded border shadow-lg">
         <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
-        <p class="text-sm text-slate-300">Selecciona un territorio para accionar</p>
+        <p class="panel-muted text-sm">Selecciona un territorio para accionar</p>
     </div>
+
+    <button id="theme-toggle" style="position: fixed !important; top: 1rem !important; right: 1rem !important; left: auto !important; z-index: 99999 !important;" class="theme-toggle h-11 w-11 rounded border shadow-lg flex items-center justify-center text-lg" aria-label="Cambiar tema" title="Cambiar tema">
+        <span id="theme-icon">☀️</span>
+    </button>
 
     <!--Hover sobre los territorios-->
     <div id="tooltip"

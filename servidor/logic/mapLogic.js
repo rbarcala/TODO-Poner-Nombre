@@ -184,7 +184,24 @@ export function validateCustomMap(territories, fronteras, terrainTypes, particip
  * @param {Array<number>} terrainTypeIds 
  * @returns {Object} { territorios: Array, fronteras: Array }
  */
-export function generateMap(rows = 4, cols = 4, participatingCountryIds = [], terrainTypeIds = [1]) {
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function shuffle(array) {
+    const copy = [...array];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+export function generateMap(rows, cols, participatingCountryIds = [], terrainTypeIds = [1]) {
+    const minSize = Math.max(2, participatingCountryIds.length + 1);
+    const effectiveRows = Number.isInteger(rows) && rows >= minSize ? rows : getRandomInt(minSize, 5);
+    const effectiveCols = Number.isInteger(cols) && cols >= minSize ? cols : getRandomInt(minSize, 5);
+
     const territorios = [];
     const fronteras = [];
     const grid = [];
@@ -192,15 +209,11 @@ export function generateMap(rows = 4, cols = 4, participatingCountryIds = [], te
     let currentId = 1;
 
     // 1. Crear grilla de territorios
-    for (let r = 0; r < rows; r++) {
+    for (let r = 0; r < effectiveRows; r++) {
         grid[r] = [];
-        for (let c = 0; c < cols; c++) {
-            const countryAssigned = participatingCountryIds.length > 0
-                ? participatingCountryIds[(r * cols + c) % participatingCountryIds.length]
-                : null;
-            
+        for (let c = 0; c < effectiveCols; c++) {
             const terrainAssigned = terrainTypeIds.length > 0
-                ? terrainTypeIds[(r + c) % terrainTypeIds.length]
+                ? terrainTypeIds[getRandomInt(0, terrainTypeIds.length - 1)]
                 : 1;
 
             const t = {
@@ -211,8 +224,8 @@ export function generateMap(rows = 4, cols = 4, participatingCountryIds = [], te
                 coord_x: c + 1,
                 coord_y: r + 1,
                 tipo_terreno_id: terrainAssigned,
-                pais_duenio_id: countryAssigned,
-                tropas_actuales: 3
+                pais_duenio_id: null,
+                tropas_actuales: 0
             };
 
             territorios.push(t);
@@ -220,13 +233,22 @@ export function generateMap(rows = 4, cols = 4, participatingCountryIds = [], te
         }
     }
 
+    const shuffledTerritories = shuffle(territorios);
+    const shuffledCountries = shuffle(participatingCountryIds);
+
+    shuffledCountries.slice(0, Math.min(shuffledCountries.length, shuffledTerritories.length)).forEach((countryId, index) => {
+        const territory = shuffledTerritories[index];
+        territory.pais_duenio_id = countryId;
+        territory.tropas_actuales = 3;
+    });
+
     // 2. Conectar fronteras horizontales y verticales
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < effectiveRows; r++) {
+        for (let c = 0; c < effectiveCols; c++) {
             const current = grid[r][c];
 
             // Derecha
-            if (c + 1 < cols) {
+            if (c + 1 < effectiveCols) {
                 const right = grid[r][c + 1];
                 fronteras.push({
                     id_territorio_origen: current.id,
@@ -235,7 +257,7 @@ export function generateMap(rows = 4, cols = 4, participatingCountryIds = [], te
             }
 
             // Abajo
-            if (r + 1 < rows) {
+            if (r + 1 < effectiveRows) {
                 const down = grid[r + 1][c];
                 fronteras.push({
                     id_territorio_origen: current.id,

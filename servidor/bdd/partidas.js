@@ -86,7 +86,7 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
                 [partida.id, t.nombre || `Sector (${t.x},${t.y})`, t.x, t.y, t.tipo_terreno_id, t.pais_duenio_id]
             );
             const territorioGuardado = resTerritorio.rows[0];
-            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales || 3);
+            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales ?? 3);
             idMap.set(t.id, territorioGuardado.id);
         }
 
@@ -132,7 +132,7 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
             SELECT t.*, tt.nombre as tipo_terreno_nombre, tt.color_hex as terreno_color,
                    tt.modificador_ataque, tt.modificador_defensa,
                    p.nombre as pais_duenio_nombre, p.color_hex as pais_duenio_color,
-                   COALESCE(COUNT(te.id_tropa), 1)::integer as tropas_actuales
+                   COUNT(te.id_tropa)::integer as tropas_actuales
             FROM territorios t
             LEFT JOIN tipos_de_terreno tt ON t.tipo_terreno_id = tt.id
             LEFT JOIN paises p ON t.pais_duenio_id = p.id
