@@ -79,6 +79,7 @@ function configurarEventosGlobales() {
     document.getElementById('btn-reforzar')?.addEventListener('click', manejarRefuerzo);
     document.getElementById('btn-mover')?.addEventListener('click', () => activarModoEspecial('mover'));
     document.getElementById('btn-atacar')?.addEventListener('click', () => activarModoEspecial('atacar'));
+    document.getElementById('btn-pasar-turno')?.addEventListener('click', manejarPasarTurno);
 }
 
 //INTERFAZ
@@ -275,6 +276,89 @@ async function procesarAtaque(territorioDestino) {
     }
     
     deseleccionarTerritorio();
+    verificarYMostrarVictoria();
+}
+
+function verificarYMostrarVictoria() {
+    if (!estadoJuego || !estadoJuego.territorios || !estadoJuego.paises) return;
+
+    const dueniosUnicos = new Set(
+        estadoJuego.territorios
+            .map(t => t.pais_duenio_id)
+            .filter(id => id !== null && id !== undefined)
+    );
+
+    const esPartidaFinalizada = estadoJuego.partida?.estado === 'finalizada' || dueniosUnicos.size === 1;
+
+    if (esPartidaFinalizada && dueniosUnicos.size > 0) {
+        const ganadorId = estadoJuego.partida?.ganador_pais_id || Array.from(dueniosUnicos)[0];
+        const paisGanador = estadoJuego.paises.find(p => p.pais_id === ganadorId || p.id === ganadorId);
+        const nombreGanador = paisGanador ? (paisGanador.nombre || paisGanador.pais_nombre) : `País #${ganadorId}`;
+
+        mostrarModalVictoria(nombreGanador);
+    }
+}
+
+function mostrarModalVictoria(nombreGanador) {
+    const modal = document.getElementById('modal-victoria');
+    const mensaje = document.getElementById('victoria-mensaje');
+    if (mensaje) {
+        mensaje.textContent = `¡${nombreGanador} ha conquistado la totalidad de los territorios y se consagra como la única civilización victoriosa!`;
+    }
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        modal.style.display = 'flex';
+    }
+}
+
+function actualizarInfoTurno() {
+    const info = document.getElementById('turno-actual-info');
+    if (info && estadoJuego && estadoJuego.partida && estadoJuego.paises) {
+        const paisActivo = estadoJuego.paises.find(p => p.pais_id === estadoJuego.partida.turno_actual || p.id === estadoJuego.partida.turno_actual);
+        const nombrePais = paisActivo ? (paisActivo.nombre || paisActivo.pais_nombre) : `País #${estadoJuego.partida.turno_actual}`;
+        info.textContent = `Turno de: ${nombrePais}`;
+    }
+}
+
+async function manejarPasarTurno() {
+    try {
+        const data = await apiPasarTurno(partidaId);
+        estadoJuego = data.estado;
+        
+        if (data.botLogs && data.botLogs.length > 0) {
+            let logText = `🤖 ACCIONES DE LAS IAs ESTE TURNO:\n`;
+
+            data.botLogs.forEach((bot, index) => {
+                logText += `\n----------------------------------------\n`;
+                logText += `📌 ${index + 1}. TURNO DE: ${bot.botNombre.toUpperCase()}\n`;
+
+                if (bot.deployments && bot.deployments.length > 0) {
+                    const totalRefuerzos = bot.deployments.reduce((a, b) => a + b.cantidad, 0);
+                    logText += `  • Refuerzos: Desplegó ${totalRefuerzos} tropas.\n`;
+                }
+
+                if (bot.combats && bot.combats.length > 0) {
+                    logText += `  • Combates realizados:\n`;
+                    bot.combats.forEach(c => {
+                        logText += `    - Atacó sector #${c.destino_id} con ${c.tropas_atacantes} tropas: ${c.attackerWins ? '¡CONQUISTADO! 🚩' : 'REPELIDO 🛡️'}\n`;
+                    });
+                } else {
+                    logText += `  • Combates: Decidió no atacar este turno.\n`;
+                }
+            });
+
+            alert(logText);
+        }
+
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
+        deseleccionarTerritorio();
+        verificarYMostrarVictoria();
+    } catch (error) {
+        console.error("Error al pasar turno:", error);
+        alert(`No se pudo pasar de turno:\n- ${error.message}`);
+    }
 }
 
 //LLAMADAS A LA API (FETCH)
@@ -290,6 +374,8 @@ async function cargarYRenderizarMapa(partidaId) {
         estadoJuego = await respuesta.json();
         console.log("Estado de la partida:", estadoJuego);
         dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
+        verificarYMostrarVictoria();
     } catch (error) {
         console.error("Error al cargar el mapa:", error);
     }
@@ -318,6 +404,14 @@ async function apiAtacar(idPartida, origenId, destinoId, cantidad) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas_atacantes: cantidad })
+    });
+    return procesarRespuestaApi(respuesta);
+}
+
+async function apiPasarTurno(idPartida) {
+    const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/pasar-turno`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
     });
     return procesarRespuestaApi(respuesta);
 }

@@ -56,10 +56,10 @@ endpointsPartidas.post("/", async (req, res) => {
     ? paises_ids.filter((id) => Number.isInteger(Number(id)) && Number(id) > 0).map((id) => Number(id))
     : [];
 
-  if (paisesIds.length === 0) {
+  if (paisesIds.length < 2) {
     const todosPaises = await obtenerPaises();
-    if (!todosPaises || todosPaises.length === 0) {
-      return res.status(400).json({ error: "No hay países registrados en la base de datos." });
+    if (!todosPaises || todosPaises.length < 2) {
+      return res.status(400).json({ error: "Se necesitan al menos 2 países registrados en la base de datos." });
     }
     paisesIds = todosPaises.slice(0, 4).map((p) => p.id);
   }
@@ -205,14 +205,20 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   });
 });
 
-// POST /api/partidas/:id/pasar-turno - Avanzar turno (y ejecutar bot si corresponde)
+// POST /api/partidas/:id/pasar-turno - Avanzar turno secuencialmente por todas las IAs hasta volver al jugador humano
 endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
   const partidaId = parseInt(req.params.id);
 
   let estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
 
-  const siguientePaisId = getNextActivePlayer(estado.paises, estado.partida.turno_actual);
+  const humanoPaisId = estado.paises[0]?.pais_id || estado.paises[0]?.id;
+  const catalogTropas = await obtenerTiposTropas();
+  const botLogs = [];
+  let guardCounter = 0;
+
+  // 1. Avanzar turno inicial desde el jugador humano al primer bot
+  let siguientePaisId = getNextActivePlayer(estado.paises, estado.partida.turno_actual);
   if (!siguientePaisId) {
     return res.status(400).json({ error: "No se pudo determinar el siguiente jugador." });
   }
@@ -220,33 +226,42 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
   await actualizarEstadoPartida(partidaId, siguientePaisId, 'en_curso');
   estado = await obtenerEstadoCompletoPartida(partidaId);
 
-  const paisActivoObj = estado.paises.find(p => p.pais_id === siguientePaisId);
-  let botLog = null;
+  // 2. Bucle secuencial: Mientras el turno actual sea un BOT (distinto del jugador humano), la IA actúa
+  while (estado.partida.turno_actual !== humanoPaisId && guardCounter < 10) {
+    guardCounter++;
 
-  if (paisActivoObj && paisActivoObj.agresividad > 0) {
-    const catalogTropas = await obtenerTiposTropas();
-    botLog = executeBotTurn(paisActivoObj, estado.territorios, estado.fronteras, estado.paises, catalogTropas || []);
+    const botActualObj = estado.paises.find(p => (p.pais_id || p.id) === estado.partida.turno_actual);
+    if (!botActualObj) break;
+
+    const botLog = executeBotTurn(botActualObj, estado.territorios, estado.fronteras, estado.paises, catalogTropas || []);
 
     if (botLog.updatedTerritories) {
-      const catalogTropas = await obtenerTiposTropas();
       for (const t of botLog.updatedTerritories) {
         await actualizarTerritorio(t.id, t.pais_duenio_id, t.tropas_actuales, catalogTropas || []);
       }
     }
 
+    botLogs.push({
+      botId: botActualObj.pais_id || botActualObj.id,
+      botNombre: botActualObj.nombre || `Bot #${botActualObj.pais_id || botActualObj.id}`,
+      deployments: botLog.deployments || [],
+      combats: botLog.combatLogs || []
+    });
+
     if (botLog.isGameOver) {
       await actualizarEstadoPartida(partidaId, null, 'finalizada', botLog.winnerCountryId);
-    } else {
-      const proximoPostBot = getNextActivePlayer(estado.paises, siguientePaisId);
-      await actualizarEstadoPartida(partidaId, proximoPostBot, 'en_curso');
+      estado = await obtenerEstadoCompletoPartida(partidaId);
+      break;
     }
 
+    const proximoTurno = getNextActivePlayer(estado.paises, estado.partida.turno_actual);
+    await actualizarEstadoPartida(partidaId, proximoTurno, 'en_curso');
     estado = await obtenerEstadoCompletoPartida(partidaId);
   }
 
   res.json({
     siguientePaisId: estado.partida.turno_actual,
-    botLog,
+    botLogs,
     estado
   });
 });

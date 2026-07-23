@@ -68,9 +68,14 @@
     <!--Para inyectar circulos y lineas (territorios y fronteras) desde js-->
     <svg id="lienzo-mapa" class="absolute inset-0 z-10 w-full h-full"></svg>
 
-    <div class="panel absolute top-4 left-4 z-20 p-4 rounded border shadow-lg">
-        <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
-        <p class="panel-muted text-sm">Selecciona un territorio para accionar</p>
+    <div class="panel absolute top-4 left-4 z-20 p-4 rounded border shadow-lg flex flex-col gap-3">
+        <div>
+            <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
+            <p id="turno-actual-info" class="panel-muted text-sm font-semibold mt-1">Turno de: cargando...</p>
+        </div>
+        <button id="btn-pasar-turno" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded shadow transition-all active:scale-95 text-sm cursor-pointer flex items-center justify-center gap-1">
+            ⏩ Pasar Turno (IA)
+        </button>
     </div>
 
     <button id="theme-toggle" style="position: fixed !important; top: 1rem !important; right: 1rem !important; left: auto !important; z-index: 99999 !important;" class="theme-toggle h-11 w-11 rounded border shadow-lg flex items-center justify-center text-lg" aria-label="Cambiar tema" title="Cambiar tema">
@@ -114,6 +119,22 @@
         class="absolute hidden pointer-events-none z-[9999] text-sm p-2 rounded border shadow-lg">
         <div style="text-align: center;">
             <h4>Seleccione el territorio enemigo a atacar</h4>
+        </div>
+    </div>
+
+    <!-- Modal de Victoria y Fin de Partida -->
+    <div id="modal-victoria" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md">
+        <div class="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900/95 p-8 text-center shadow-2xl space-y-6">
+            <div class="text-6xl animate-bounce">🏆</div>
+            <div>
+                <h2 class="text-3xl font-extrabold text-amber-400 uppercase tracking-wide">¡Victoria Cumplida!</h2>
+                <p id="victoria-mensaje" class="text-slate-300 text-base mt-3 font-medium">El imperio ha conquistado todos los territorios del mapa.</p>
+            </div>
+            <div class="pt-2">
+                <a href="index.html" class="inline-block w-full bg-gradient-to-r from-red-700 to-amber-600 hover:from-red-600 hover:to-amber-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg transition-all duration-200 uppercase tracking-wider text-sm active:scale-95">
+                    🏠 Volver al Menú Principal
+                </a>
+            </div>
         </div>
     </div>
 

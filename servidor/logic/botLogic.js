@@ -7,13 +7,14 @@ import { areAdjacent, calculateReinforcements } from './gameLogic.js';
 /**
  * Determina dónde debe desplegar el Bot sus tropas de refuerzo.
  * 
- * @param {Object} botCountry - Facción del bot { id, economia, agresividad }
+ * @param {Object} botCountry - Facción del bot { id, pais_id, economia, agresividad }
  * @param {Array<Object>} botTerritories - Territorios propiedad del bot
  * @param {Array<Object>} allTerritories - Todos los territorios en la partida
  * @param {Array<Object>} fronteras - Listado de aristas del grafo (fronteras)
  * @returns {Array<Object>} Despliegues decididos [ { territorio_id, cantidad } ]
  */
 export function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras) {
+    const botId = botCountry.pais_id !== undefined ? botCountry.pais_id : botCountry.id;
     const reinforcements = calculateReinforcements(botTerritories.length, botCountry.economia);
     const deployments = [];
 
@@ -23,7 +24,7 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
     const borderTerritories = [];
     for (const t of botTerritories) {
         const hasEnemyNeighbor = allTerritories.some(other => 
-            other.pais_duenio_id !== botCountry.id && 
+            other.pais_duenio_id !== botId && 
             areAdjacent(t, other, fronteras)
         );
         if (hasEnemyNeighbor) {
@@ -47,7 +48,7 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
 
         for (const t of borderTerritories) {
             const neighbors = allTerritories.filter(other => 
-                other.pais_duenio_id !== botCountry.id && 
+                other.pais_duenio_id !== botId && 
                 areAdjacent(t, other, fronteras)
             );
             for (const n of neighbors) {
@@ -94,7 +95,7 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
         // Distribuye proporcionalmente al tamaño de los ejércitos enemigos adyacentes (amenaza)
         const threats = borderTerritories.map(t => {
             const neighbors = allTerritories.filter(other => 
-                other.pais_duenio_id !== botCountry.id && 
+                other.pais_duenio_id !== botId && 
                 areAdjacent(t, other, fronteras)
             );
             const enemyTroopsTotal = neighbors.reduce((sum, n) => sum + (n.tropas_actuales || 0), 0);
@@ -126,22 +127,23 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
  * Determina qué ataques realizará el Bot durante su turno.
  * El Bot evalúa los territorios enemigos limítrofes y ataca si la relación de fuerzas supera su umbral.
  * 
- * @param {Object} botCountry - Facción del bot { id, agresividad, tecnologia }
+ * @param {Object} botCountry - Facción del bot { id, pais_id, agresividad, tecnologia }
  * @param {Array<Object>} botTerritories - Territorios del bot (con tropas ya actualizadas por despliegue)
  * @param {Array<Object>} allTerritories - Todos los territorios de la partida
  * @param {Array<Object>} fronteras - Listado de aristas del grafo (fronteras)
  * @returns {Array<Object>} Lista de ataques a ejecutar [ { origen_id, destino_id, tropas_atacantes } ]
  */
 export function getBotAttacks(botCountry, botTerritories, allTerritories, fronteras) {
+    const botId = botCountry.pais_id !== undefined ? botCountry.pais_id : botCountry.id;
     const attacks = [];
     const aggressiveness = botCountry.agresividad || 5;
 
     // Determinar umbral de ratio (Mis tropas / Tropas enemigo)
-    let ratioThreshold = 1.5; // Moderado
+    let ratioThreshold = 1.0; // Ataca cuando iguala o supera en fuerzas
     if (aggressiveness >= 8) {
-        ratioThreshold = 1.2; // Muy agresivo (arriesgado)
+        ratioThreshold = 0.9; // Muy agresivo (se arriesga aun con ligera desventaja)
     } else if (aggressiveness <= 3) {
-        ratioThreshold = 2.0; // Muy conservador (solo victorias casi seguras)
+        ratioThreshold = 1.3; // Conservador (exige ventaja clara)
     }
 
     // Copia temporal de tropas locales para evitar ataques simultáneos imposibles en el mismo ciclo
@@ -156,7 +158,7 @@ export function getBotAttacks(botCountry, botTerritories, allTerritories, fronte
         if (localTroopStats[t.id] < 2) continue;
 
         const enemyNeighbors = allTerritories.filter(other => 
-            other.pais_duenio_id !== botCountry.id && 
+            other.pais_duenio_id !== botId && 
             areAdjacent(t, other, fronteras)
         );
 

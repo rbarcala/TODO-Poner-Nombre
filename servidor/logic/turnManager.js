@@ -74,7 +74,7 @@ export function checkVictoryCondition(territories, participatingCountries) {
  */
 export function executeBotTurn(botCountry, allTerritories, fronteras, participatingCountries, troopTypesCatalog) {
     const tempTerritories = JSON.parse(JSON.stringify(allTerritories));
-    const botId = botCountry.id || botCountry.pais_id;
+    const botId = botCountry.pais_id !== undefined ? botCountry.pais_id : botCountry.id;
 
     const turnLog = {
         botId: botId,
