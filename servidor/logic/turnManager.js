@@ -85,28 +85,34 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
         updatedTerritories: []
     };
 
-    // 1. Fase de Despliegue
+    let totalActionsExecuted = 0;
+
+    // 1. Fase de Despliegue (Refuerzos)
     const botTerritories = tempTerritories.filter(t => t.pais_duenio_id === botId);
     if (botTerritories.length === 0) {
         return turnLog;
     }
 
     const deployments = getBotDeployment(botCountry, botTerritories, tempTerritories, fronteras);
-    turnLog.deployments = deployments;
-
-    for (const dep of deployments) {
-        const t = tempTerritories.find(x => x.id === dep.territorio_id);
-        if (t) {
-            t.tropas_actuales = (t.tropas_actuales || 0) + dep.cantidad;
+    if (deployments && deployments.length > 0) {
+        turnLog.deployments = deployments;
+        for (const dep of deployments) {
+            const t = tempTerritories.find(x => x.id === dep.territorio_id);
+            if (t) {
+                t.tropas_actuales = (t.tropas_actuales || 0) + dep.cantidad;
+            }
         }
+        totalActionsExecuted += 1; // El refuerzo cuenta como 1 acción de turno
     }
 
-    // 2. Fase de Ataque
+    // 2. Fase de Ataque (Movimientos/Combates)
+    // El bot realiza ataques con las acciones restantes (máximo 2 acciones totales por turno)
+    const maxAttacksAllowed = Math.max(0, 2 - totalActionsExecuted);
     let attacksRemaining = true;
-    let safeguardCounter = 0;
+    let attackCounter = 0;
 
-    while (attacksRemaining && safeguardCounter < 15) {
-        safeguardCounter++;
+    while (attacksRemaining && attackCounter < maxAttacksAllowed) {
+        attackCounter++;
         const currentBotTerritories = tempTerritories.filter(t => t.pais_duenio_id === botId);
         
         const plannedAttacks = getBotAttacks(botCountry, currentBotTerritories, tempTerritories, fronteras);

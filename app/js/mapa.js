@@ -177,9 +177,13 @@ async function manejarRefuerzo() {
         estadoJuego = nuevoEstado;
         territorioSeleccionado = estadoJuego.territorios.find(t => t.id === territorioSeleccionado.id);
         
-        document.getElementById('panel-subtitulo').textContent = 
-            `Perteneciente a ${territorioSeleccionado.pais_duenio_nombre} (${territorioSeleccionado.tropas_actuales} tropas)`;
+        if (territorioSeleccionado) {
+            document.getElementById('panel-subtitulo').textContent = 
+                `Perteneciente a ${territorioSeleccionado.pais_duenio_nombre} (${territorioSeleccionado.tropas_actuales} tropas)`;
+        }
         
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
         deseleccionarTerritorio();
     } catch (error) {
         console.error("Error al reforzar:", error);
@@ -214,6 +218,8 @@ async function procesarMovimiento(territorioDestino) {
 
     try {
         estadoJuego = await apiMoverTropas(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
         deseleccionarTerritorio(); 
     } catch (error) {
         console.error("Error al mover tropas:", error);
@@ -270,6 +276,9 @@ async function procesarAtaque(territorioDestino) {
         if (resultadoAtaque.victory?.isGameOver) {
             alert(`🏆 ¡PARTIDA FINALIZADA!\n\nGanó la civilización ID: ${resultadoAtaque.victory.winnerCountryId}`);
         }
+
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
     } catch (error) {
         console.error("Error al atacar:", error);
         alert(`No se pudo atacar: \n- ${error.message}`);
@@ -317,7 +326,7 @@ function actualizarInfoTurno() {
     if (info && estadoJuego && estadoJuego.partida && estadoJuego.paises) {
         const paisActivo = estadoJuego.paises.find(p => p.pais_id === estadoJuego.partida.turno_actual || p.id === estadoJuego.partida.turno_actual);
         const nombrePais = paisActivo ? (paisActivo.nombre || paisActivo.pais_nombre) : `País #${estadoJuego.partida.turno_actual}`;
-        info.textContent = `Turno de: ${nombrePais}`;
+        info.innerHTML = `Turno de: <strong>${nombrePais}</strong><br><span style="font-size:11px; opacity:0.9;">Acciones del turno (reforzar/mover/atacar): ${movsUsados}/2</span>`;
     }
 }
 
