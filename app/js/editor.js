@@ -260,12 +260,18 @@ async function handleSubmit(form) {
     normalized.resistencia_terreno_id = resId;
     normalized.terreno_id = resId;
   } else if (entity === 'tropas') {
-    if (payload.id) normalized.id = Number(payload.id);
-    normalized.tipo = payload.tipo;
-    normalized.descripcion = payload.descripcion;
-    normalized.dado_min = Number(payload.dado_min);
-    normalized.dado_max = Number(payload.dado_max);
-    normalized.costo = Number(payload.costo);
+    // Solo enviamos id si es un número válido y mayor a 0 (para PUT)
+    if (payload.id && Number(payload.id) > 0) {
+      normalized.id = Number(payload.id);
+    }
+    
+    normalized.tipo = payload.tipo ? payload.tipo.trim() : '';
+    normalized.descripcion = payload.descripcion ? payload.descripcion.trim() : null;
+    
+    // Parseo seguro de enteros para evitar enviar NaN o cadenas vacías
+    normalized.dado_min = payload.dado_min !== '' ? parseInt(payload.dado_min, 10) : 1;
+    normalized.dado_max = payload.dado_max !== '' ? parseInt(payload.dado_max, 10) : 6;
+    normalized.costo = payload.costo !== '' ? parseInt(payload.costo, 10) : 1;
   } else {
     if (payload.id) normalized.id = Number(payload.id);
     normalized.nombre = payload.nombre;
