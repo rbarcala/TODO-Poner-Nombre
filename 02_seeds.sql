@@ -1,10 +1,10 @@
 -- Tipos de terreno
 INSERT INTO tipos_de_terreno (nombre, descripcion, color_hex, modificador_ataque, modificador_defensa) VALUES
-('Llanura', 'Terreno abierto y plano, ideal para grandes batallas.', '#75AADB', 1.00, 1.00),
+('Llanura', 'Terreno abierto y plano, ideal para grandes batallas.', '#50a85f', 1.00, 1.00),
 ('Montana', 'Terreno elevado que otorga ventaja defensiva.', '#6B4F4F', 0.80, 1.20),
-('Costa', 'Zona de encuentro entre tierra y mar.', '#00D1FF', 0.90, 0.90),
-('Urbano', 'Ciudades densas donde el combate es cercano y dificil.', '#555555', 0.70, 1.30),
-('Selva', 'Vegetacion densa que dificulta el movimiento.', '#2D5A27', 0.85, 1.10)
+('Costa', 'Zona de encuentro entre tierra y mar.', '#2a43ce', 0.90, 0.90),
+('Urbano', 'Ciudades densas donde el combate es cercano y dificil.', '#3d3d3d', 0.70, 1.30),
+('Selva', 'Vegetacion densa que dificulta el movimiento.', '#118f00', 0.85, 1.10)
 ON CONFLICT (nombre) DO UPDATE SET
 descripcion = EXCLUDED.descripcion,
 color_hex = EXCLUDED.color_hex,
