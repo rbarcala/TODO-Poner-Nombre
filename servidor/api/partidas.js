@@ -14,7 +14,7 @@ import { obtenerTiposTropas } from "../bdd/tropas.js";
 
 import { generateMap } from "../logic/mapLogic.js";
 import { validateDeploymentAction, validateMoveAction } from "../logic/actionValidators.js";
-import { resolveCombat, buildTroopList } from "../logic/gameLogic.js";
+import { calculateReinforcements, resolveCombat, buildTroopList } from "../logic/gameLogic.js";
 import { getNextActivePlayer, checkVictoryCondition, executeBotTurn } from "../logic/turnManager.js";
 
 export const endpointsPartidas = Router();
@@ -77,26 +77,31 @@ endpointsPartidas.post("/", async (req, res) => {
 // POST /api/partidas/:id/desplegar - Reforzar tropas en territorio propio
 endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   const partidaId = parseInt(req.params.id);
-  const { territorio_id, cantidad } = req.body;
+  //const { territorio_id, cantidad } = req.body;
+  const { territorio_id } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
 
+  const activePlayerId = estado.partida.turno_actual;
+
+  const territoriesCount = estado.territorios.filter(t => t.pais_duenio_id === activePlayerId).length;
+  const paisActivo = estado.paises.find(p => p.id === activePlayerId);
+  const economia = paisActivo ? paisActivo.economia : 0;
+  const cantidad = calculateReinforcements(territoriesCount, economia);
+
   const territorioTarget = estado.territorios.find(t => t.id === territorio_id);
   if (!territorioTarget) return res.status(400).json({ error: "Territorio no encontrado." });
 
-  const activePlayerId = estado.partida.turno_actual;
   const validation = validateDeploymentAction(
     activePlayerId,
     estado.territorios,
     [{ territorio_id, cantidad }],
     999
   );
-
   if (!validation.isValid) {
     return res.status(400).json({ errors: validation.errors });
   }
-
   const tiposTropa = await obtenerTiposTropas();
   const nuevasTropas = (territorioTarget.tropas_actuales || 1) + cantidad;
   await actualizarTerritorio(territorio_id, territorioTarget.pais_duenio_id, nuevasTropas, tiposTropa || []);

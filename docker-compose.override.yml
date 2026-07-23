@@ -1,0 +1,10 @@
+services:
+  bdd:
+    volumes:
+      # Usamos la ruta EXACTA para reemplazar el montaje de Windows
+      - postgres_data:/var/lib/postgresql
+      - ./01_esquema_bdd.sql:/docker-entrypoint-initdb.d/01_esquema_bdd.sql:ro
+      - ./02_seeds.sql:/docker-entrypoint-initdb.d/02_seeds.sql:ro
+
+volumes:
+  postgres_data:

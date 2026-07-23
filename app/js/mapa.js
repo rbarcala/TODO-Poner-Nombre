@@ -1,3 +1,4 @@
+//CONSTANTES Y ESTADO GLOBAL
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const ESCALA = 150;
@@ -27,9 +28,17 @@ function aplicarTema(theme) {
     localStorage.setItem('mapa-theme', theme);
 }
 
+let estadoJuego = null;
+let territorioSeleccionado = null;
+let territorioOrigenMover = null;
+let modoMoverActivo = false;
+let modoAtacarActivo = false;
+let partidaId = null;
+
+//INICIALIZACION
 document.addEventListener('DOMContentLoaded', () => {
     const parametros = new URLSearchParams(window.location.search);
-    const partidaId = parametros.get('id');
+    partidaId = parametros.get('id');
     const themeToggle = document.getElementById('theme-toggle');
 
     if (themeToggle) {
@@ -43,33 +52,269 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('mapa-theme');
     aplicarTema(savedTheme === 'light' ? 'light' : 'dark');
 
-    if (partidaId) {
-        cargarYRenderizarMapa(partidaId);
-    } else {
+    if (!partidaId) {
         alert("No se encontró el ID de la partida. Volvé al menú principal.");
         window.location.href = "index.html";
+        return;
     }
+
+    cargarYRenderizarMapa(partidaId);
+    configurarEventosGlobales();
 });
 
+function configurarEventosGlobales() {
+    // Teclado
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && territorioSeleccionado) {
+            deseleccionarTerritorio();
+        }
+    });
+
+    //Seguimiento mouse para paneles flotantes
+    document.addEventListener('mousemove', (e) => {
+        if (modoMoverActivo) posicionarPanel('panel-mover-tropas', e);
+        if (modoAtacarActivo) posicionarPanel('panel-atacar', e);
+    });
+
+    document.getElementById('btn-reforzar')?.addEventListener('click', manejarRefuerzo);
+    document.getElementById('btn-mover')?.addEventListener('click', () => activarModoEspecial('mover'));
+    document.getElementById('btn-atacar')?.addEventListener('click', () => activarModoEspecial('atacar'));
+}
+
+//INTERFAZ
+function posicionarPanel(panelId, evento) {
+    const panel = document.getElementById(panelId);
+    if (panel) {
+        panel.style.left = `${evento.pageX + 15}px`;
+        panel.style.top = `${evento.pageY + 15}px`;
+    }
+}
+
+function mostrarPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    panel.classList.remove('hidden');
+    panel.style.display = 'block';
+}
+
+function ocultarPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    panel.classList.add('hidden');
+    panel.style.display = 'none';
+}
+
+function activarModoEspecial(modo) {
+    if (!territorioSeleccionado) return;
+    
+    territorioOrigenMover = territorioSeleccionado;
+    document.getElementById('panel-acciones').style.display = 'none';
+
+    if (modo === 'mover') {
+        modoMoverActivo = true;
+        mostrarPanel('panel-mover-tropas');
+    } else if (modo === 'atacar') {
+        modoAtacarActivo = true;
+        mostrarPanel('panel-atacar');
+    }
+}
+
+//LOGICA DE TERRITORIOS Y CLICKS
+function seleccionarTerritorio(territorio) {
+    territorioSeleccionado = territorio;
+    const panel = document.getElementById('panel-acciones');
+    const titulo = document.getElementById('panel-titulo');
+    const subtitulo = document.getElementById('panel-subtitulo');
+    
+    titulo.textContent = territorio.nombre || `Territorio #${territorio.id}`;
+    subtitulo.textContent = `Perteneciente a ${territorio.pais_duenio_nombre} (${territorio.tropas_actuales} tropas)`;
+    
+    panel.style.display = 'flex';
+    dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+}
+
+function deseleccionarTerritorio() {
+    territorioSeleccionado = null;
+    modoMoverActivo = false;
+    modoAtacarActivo = false;
+    
+    document.getElementById('panel-acciones').style.display = 'none';
+    ocultarPanel('panel-mover-tropas');
+    ocultarPanel('panel-atacar');
+    
+    dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+}
+
+async function onTerritorioClickeado(territorioDestino) {
+    if (modoAtacarActivo) {
+        await procesarAtaque(territorioDestino);
+    } else if (modoMoverActivo) {
+        await procesarMovimiento(territorioDestino);
+    } else {
+        procesarSeleccionNormal(territorioDestino);
+    }
+}
+
+function procesarSeleccionNormal(territorioDestino) {
+    const turnoActualPaisId = estadoJuego.partida.turno_actual;
+    
+    if (territorioSeleccionado && territorioSeleccionado.id === territorioDestino.id) {
+        deseleccionarTerritorio();
+        return;
+    }
+    
+    if (territorioDestino.pais_duenio_id === turnoActualPaisId) {
+        seleccionarTerritorio(territorioDestino);
+    } else {
+        alert("Alto ahí: Este territorio pertenece a otro jugador o no es tu turno.");
+    }
+}
+
+//ACCIONES DE JUEGO (REFORZAR, MOVER, ATACAR)
+async function manejarRefuerzo() {
+    if (!territorioSeleccionado) return;
+    try {
+        const nuevoEstado = await apiReforzarTerritorio(partidaId, territorioSeleccionado.id);
+        estadoJuego = nuevoEstado;
+        territorioSeleccionado = estadoJuego.territorios.find(t => t.id === territorioSeleccionado.id);
+        
+        document.getElementById('panel-subtitulo').textContent = 
+            `Perteneciente a ${territorioSeleccionado.pais_duenio_nombre} (${territorioSeleccionado.tropas_actuales} tropas)`;
+        
+        deseleccionarTerritorio();
+    } catch (error) {
+        console.error("Error al reforzar:", error);
+        alert(`No se pudo reforzar:\n- ${error.message}`);
+    }
+}
+
+async function procesarMovimiento(territorioDestino) {
+    ocultarPanel('panel-mover-tropas');
+    modoMoverActivo = false;
+
+    if (territorioOrigenMover.id === territorioDestino.id) {
+        alert("El territorio destino debe ser distinto al de origen.");
+        return;
+    }
+    if (territorioDestino.pais_duenio_id !== estadoJuego.partida.turno_actual) {
+        alert("Solo podés mover tropas hacia tus propios territorios.");
+        return;
+    }
+
+    const cantidadStr = prompt(`¿Cuántas tropas querés mover de ${territorioOrigenMover.nombre || 'origen'} a ${territorioDestino.nombre || 'destino'}?`);
+    if (!cantidadStr || cantidadStr.trim() === '') {
+        deseleccionarTerritorio();
+        return;
+    }
+
+    const cantidad = parseInt(cantidadStr, 10);
+    if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
+        alert("Cantidad inválida. Recordá que debés dejar al menos 1 tropa en el territorio de origen.");
+        return;
+    }
+
+    try {
+        estadoJuego = await apiMoverTropas(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
+        deseleccionarTerritorio(); 
+    } catch (error) {
+        console.error("Error al mover tropas:", error);
+        alert(`No se pudo mover tropas: \n- ${error.message}`);
+    }
+}
+
+async function procesarAtaque(territorioDestino) {
+    ocultarPanel('panel-atacar');
+    modoAtacarActivo = false;
+
+    if (territorioOrigenMover.id === territorioDestino.id) {
+        alert("El territorio destino debe ser distinto al de origen.");
+        deseleccionarTerritorio();
+        return;
+    }
+    if (territorioDestino.pais_duenio_id === estadoJuego.partida.turno_actual) {
+        alert("Solo podés atacar territorios enemigos.");
+        deseleccionarTerritorio();
+        return;
+    }
+
+    const cantidadStr = prompt(`¿Cuántas tropas querés movilizar para atacar ${territorioDestino.nombre || 'destino'}?`);
+    if (!cantidadStr || cantidadStr.trim() === '') {
+        deseleccionarTerritorio();
+        return;
+    }
+
+    const cantidad = parseInt(cantidadStr, 10);
+    if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
+        alert("Cantidad inválida. Recordá que debés dejar al menos 1 tropa en el territorio de origen.");
+        deseleccionarTerritorio();
+        return;
+    }
+
+    try {
+        const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
+        estadoJuego = resultadoAtaque.estado;
+        
+        if (resultadoAtaque.victory?.isGameOver) {
+            alert(`¡Partida Finalizada! Ganó el país ID: ${resultadoAtaque.victory.winnerCountryId}`);
+        }
+    } catch (error) {
+        console.error("Error al atacar:", error);
+        alert(`No se pudo atacar: \n- ${error.message}`);
+    }
+    
+    deseleccionarTerritorio();
+}
+
+//LLAMADAS A LA API (FETCH)
 async function cargarYRenderizarMapa(partidaId) {
     try {
         const respuesta = await fetch(`http://localhost:8000/api/partidas/${partidaId}/estado`);
+        if (!respuesta.ok) throw new Error(`Error de red: ${respuesta.status}`);
         
-        if (!respuesta.ok) {
-            throw new Error(`Error de red: ${respuesta.status}`);
-        }
-  
-        const estado = await respuesta.json();
-        
-        console.log("Datos del estado recibidos:", estado);
-        
-        dibujarGrafo(estado.territorios, estado.fronteras);
-        
+        estadoJuego = await respuesta.json();
+        console.log("Estado de la partida:", estadoJuego);
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
     } catch (error) {
         console.error("Error al cargar el mapa:", error);
     }
 }
 
+async function apiReforzarTerritorio(idPartida, territorioId) {
+    const respuesta = await fetch(`http://localhost:8000/api/partidas/${idPartida}/desplegar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ territorio_id: territorioId })
+    });
+    return procesarRespuestaApi(respuesta);
+}
+
+async function apiMoverTropas(idPartida, origenId, destinoId, cantidad) {
+    const respuesta = await fetch(`http://localhost:8000/api/partidas/${idPartida}/mover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas: cantidad })
+    });
+    return procesarRespuestaApi(respuesta);
+}
+
+async function apiAtacar(idPartida, origenId, destinoId, cantidad) {
+    const respuesta = await fetch(`http://localhost:8000/api/partidas/${idPartida}/atacar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas_atacantes: cantidad })
+    });
+    return procesarRespuestaApi(respuesta);
+}
+
+async function procesarRespuestaApi(respuesta) {
+    const data = await respuesta.json();
+    if (!respuesta.ok) {
+        const mensajeError = data.errors ? data.errors.join("\n- ") : (data.error || "Error desconocido");
+        throw new Error(mensajeError);
+    }
+    return data;
+}
+
+
+//DIBUJADO DEL MAPA SVG
 function dibujarGrafo(territorios, fronteras) {
     const svg = document.getElementById('lienzo-mapa');
     svg.innerHTML = ''; 
@@ -109,7 +354,6 @@ function dibujarGrafo(territorios, fronteras) {
             
             linea.setAttribute('stroke', getComputedStyle(document.body).getPropertyValue('--line-stroke').trim() || '#475569'); 
             linea.setAttribute('stroke-width', '4');
-            
             svg.appendChild(linea);
         }
     });
@@ -118,9 +362,11 @@ function dibujarGrafo(territorios, fronteras) {
     territorios.forEach(territorio => {
         const centroX = ((territorio.coord_x - minCoordX) * ESCALA) + OFFSET_X;
         const centroY = ((territorio.coord_y - minCoordY) * ESCALA) + OFFSET_Y;
+        const esElSeleccionado = territorioSeleccionado && territorioSeleccionado.id === territorio.id;
 
         const grupo = document.createElementNS(SVG_NS, 'g');
-        grupo.classList.add('cursor-pointer');
+        grupo.classList.add('cursor-pointer', 'transition-transform', 'hover:scale-110');
+        grupo.style.transformOrigin = `${centroX}px ${centroY}px`;
 
         const areaHover = document.createElementNS(SVG_NS, 'circle');
         areaHover.setAttribute('cx', centroX);
@@ -149,6 +395,14 @@ function dibujarGrafo(territorios, fronteras) {
         circulo.setAttribute('r', '33'); 
         circulo.setAttribute('fill', territorio.pais_duenio_color || '#94a3b8'); 
         circulo.style.transition = 'r 150ms ease, fill 150ms ease';
+        
+        if (esElSeleccionado) {
+            circulo.setAttribute('stroke', '#f59e0b');
+            circulo.setAttribute('stroke-width', '8');
+        } else {
+            circulo.setAttribute('stroke', '#0f172a');
+            circulo.setAttribute('stroke-width', '4');
+        }
 
         const textoTropas = document.createElementNS(SVG_NS, 'text');
         textoTropas.setAttribute('x', centroX);
@@ -159,8 +413,13 @@ function dibujarGrafo(territorios, fronteras) {
         textoTropas.setAttribute('font-weight', 'bold');
         textoTropas.setAttribute('font-family', 'sans-serif');
         textoTropas.setAttribute('font-size', '18px');
-        textoTropas.style.pointerEvents = 'none';
+        textoTropas.setAttribute("pointer-events", "none");
         textoTropas.textContent = territorio.tropas_actuales;
+
+       grupo.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onTerritorioClickeado(territorio);
+        });
 
         grupo.addEventListener("mouseenter", () => {
             tooltip.style.backgroundColor = territorio.pais_duenio_color || '#94a3b8';
