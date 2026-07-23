@@ -70,8 +70,8 @@ function renderList(entity, items) {
           <div class="flex justify-between items-start gap-2">
             <div>
               <p class="font-semibold">${item.nombre}</p>
-              <p class="text-slate-400">Eco ${item.economia} - Tec ${item.tecnologia} - Agg ${item.agresividad}</p>
-              <p class="text-slate-400">Terreno: ${terreno ? terreno.nombre : 'Sin asignar'}</p>
+              <p class="text-slate-400">Eco: ${item.economia} - Tec: ${item.tecnologia} - Agr: ${item.agresividad}</p>
+              <p class="text-slate-400">Resistencia: ${terreno ? terreno.nombre : 'Sin asignar'}</p>
             </div>
             <div class="flex gap-2">
               <button type="button" data-action="edit" data-entity="paises" data-id="${item.id}" class="text-amber-400">Editar</button>
@@ -88,7 +88,7 @@ function renderList(entity, items) {
             <div>
               <p class="font-semibold">${item.tipo}</p>
               <p class="text-slate-400">${item.descripcion || 'Sin descripcion'}</p>
-              <p class="text-slate-400">Dados ${item.dado_min}-${item.dado_max}</p>
+              <p class="text-slate-400">Dados: ${item.dado_min} a ${item.dado_max} - Costo: ${item.costo}</p>
             </div>
             <div class="flex gap-2">
               <button type="button" data-action="edit" data-entity="tropas" data-id="${item.id}" class="text-amber-400">Editar</button>
@@ -104,7 +104,7 @@ function renderList(entity, items) {
           <div>
             <p class="font-semibold">${item.nombre}</p>
             <p class="text-slate-400">${item.descripcion || 'Sin descripcion'}</p>
-            <p class="text-slate-400">Ataque ${item.modificador_ataque} - Defensa ${item.modificador_defensa}</p>
+            <p class="text-slate-400">Ataque: ${item.modificador_ataque} - Defensa: ${item.modificador_defensa}</p>
           </div>
           <div class="flex gap-2">
             <button type="button" data-action="edit" data-entity="terrenos" data-id="${item.id}" class="text-amber-400">Editar</button>
@@ -259,6 +259,7 @@ async function handleSubmit(form) {
     normalized.descripcion = payload.descripcion;
     normalized.dado_min = Number(payload.dado_min);
     normalized.dado_max = Number(payload.dado_max);
+    normalized.costo = Number(payload.costo);
   } else {
     normalized.id = payload.id ? Number(payload.id) : undefined;
     normalized.nombre = payload.nombre;
@@ -326,6 +327,7 @@ function initEditor() {
         setFieldValue(form, 'descripcion', item.descripcion);
         setFieldValue(form, 'dado_min', item.dado_min);
         setFieldValue(form, 'dado_max', item.dado_max);
+        setFieldValue(form, 'costo', item.costo);
       } else {
         setFieldValue(form, 'id', item.id);
         setFieldValue(form, 'nombre', item.nombre);
@@ -352,12 +354,12 @@ function initEditor() {
     }
   });
 
-  document.addEventListener('submit', async (event) => {
+
+  document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.id.startsWith('form-')) return;
-
-    event.preventDefault();
-    await handleSubmit(form);
+    event.preventDefault(); 
+    handleSubmit(form);
   });
 
   loadAll().catch((error) => {
