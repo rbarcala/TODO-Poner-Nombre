@@ -18,14 +18,14 @@ export const obtenerTipoTropa = async (id) => {
     }
 };
 
-export const crearTipoTropa = async (tipo, descripcion, dado_min, dado_max, costo) => {
+export const crearTipoTropa = async (tipo, descripcion, dado_min, dado_max) => {
     try {
         const query = `
-            INSERT INTO tipos_de_tropas (tipo, descripcion, dado_min, dado_max, costo) 
-            VALUES ($1, $2, $3, $4, $5) 
+            INSERT INTO tipos_de_tropas (tipo, descripcion, dado_min, dado_max) 
+            VALUES ($1, $2, $3, $4) 
             RETURNING *
         `;
-        const valores = [tipo, descripcion, dado_min, dado_max, costo];
+        const valores = [tipo, descripcion, dado_min, dado_max];
         const resultado = await pool.query(query, valores);
         return resultado.rows[0];
     } catch (error) {
@@ -33,15 +33,15 @@ export const crearTipoTropa = async (tipo, descripcion, dado_min, dado_max, cost
     }
 };
 
-export const editarTipoTropa = async (id, tipo, descripcion, dado_min, dado_max, costo) => {
+export const editarTipoTropa = async (id, tipo, descripcion, dado_min, dado_max) => {
     try {
         const query = `
             UPDATE tipos_de_tropas 
-            SET tipo = $1, descripcion = $2, dado_min = $3, dado_max = $4, costo = $5 
-            WHERE id = $6 
+            SET tipo = $1, descripcion = $2, dado_min = $3, dado_max = $4 
+            WHERE id = $5 
             RETURNING *
         `;
-        const valores = [tipo, descripcion, dado_min, dado_max, costo, id];
+        const valores = [tipo, descripcion, dado_min, dado_max, id];
         const resultado = await pool.query(query, valores);
         return resultado.rows[0];
     } catch (error) {

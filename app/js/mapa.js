@@ -163,7 +163,7 @@ function dibujarGrafo(territorios, fronteras) {
         textoTropas.textContent = territorio.tropas_actuales;
 
         grupo.addEventListener("mouseenter", () => {
-            tooltip.style.backgroundColor = territorio.pais_duenio_color || '#94a3b8';
+            tooltip.style.backgroundColor = territorio.pais_duenio_color || '#dde0e4';
             tooltip.style.borderColor = '#000000';
             tooltip.style.color = '#ffffff';
             tooltip.style.webkitTextStroke = '0.05px #000000';

@@ -6,8 +6,22 @@ import {
   editarTipoTropa,
   borrarTipoTropa
 } from "../bdd/tropas.js";
+import { pool } from "../pool.js";
 
 export const endpointsTropas = Router();
+
+const contarReferenciasTipoTropa = async (id) => {
+  const resultado = await pool.query(
+    `SELECT COUNT(*)::integer AS tropas FROM tropas WHERE id_tipo_tropa = $1`,
+    [id],
+  );
+
+  return resultado.rows[0];
+};
+
+const totalReferencias = (referencias) => (
+  Object.values(referencias).reduce((total, cantidad) => total + cantidad, 0)
+);
 
 // GET /api/tipos-tropas - Listar todos los tipos de tropas
 endpointsTropas.get("/", async (req, res) => {
@@ -26,7 +40,7 @@ endpointsTropas.get("/:id", async (req, res) => {
 
 // POST /api/tipos-tropas - Crear un nuevo tipo de tropa
 endpointsTropas.post("/", async (req, res) => {
-  const { tipo, descripcion, dado_min, dado_max, costo } = req.body;
+  const { tipo, descripcion, dado_min, dado_max } = req.body;
 
   if (!tipo) {
     return res.status(400).json({ error: "El nombre del tipo de tropa es obligatorio" });
@@ -36,8 +50,7 @@ endpointsTropas.post("/", async (req, res) => {
     tipo,
     descripcion || null,
     dado_min || 1,
-    dado_max || 6,
-    costo || 1
+    dado_max || 6
   );
 
   if (!nueva) return res.status(500).json({ error: "Error al crear el tipo de tropa" });
@@ -47,15 +60,14 @@ endpointsTropas.post("/", async (req, res) => {
 // PUT /api/tipos-tropas/:id - Editar tipo de tropa
 endpointsTropas.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { tipo, descripcion, dado_min, dado_max, costo } = req.body;
+  const { tipo, descripcion, dado_min, dado_max } = req.body;
 
   const actualizada = await editarTipoTropa(
     id,
     tipo,
     descripcion,
     dado_min,
-    dado_max,
-    costo
+    dado_max
   );
 
   if (!actualizada) return res.status(404).json({ error: "Tipo de tropa no encontrado o error al actualizar" });
@@ -65,6 +77,17 @@ endpointsTropas.put("/:id", async (req, res) => {
 // DELETE /api/tipos-tropas/:id - Borrar tipo de tropa
 endpointsTropas.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  const tropa = await obtenerTipoTropa(id);
+  if (!tropa) return res.status(404).json({ error: "Tipo de tropa no encontrado" });
+
+  const referencias = await contarReferenciasTipoTropa(id);
+  if (totalReferencias(referencias) > 0) {
+    return res.status(409).json({
+      error: "No se puede eliminar el tipo de tropa porque esta usado por tropas existentes.",
+      referencias,
+    });
+  }
+
   const eliminada = await borrarTipoTropa(id);
   if (!eliminada) return res.status(404).json({ error: "Tipo de tropa no encontrado o no se pudo eliminar" });
   res.json({ message: "Tipo de tropa eliminado correctamente", id });

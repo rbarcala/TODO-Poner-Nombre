@@ -6,7 +6,8 @@ import {
   obtenerEstadoCompletoPartida,
   actualizarTerritorio,
   actualizarEstadoPartida,
-  borrarPartida
+  borrarPartida,
+  limpiarDatosDePartidas
 } from "../bdd/partidas.js";
 import { obtenerPaises } from "../bdd/paises.js";
 import { obtenerTerrenos } from "../bdd/terrenos.js";
@@ -24,6 +25,19 @@ endpointsPartidas.get("/", async (req, res) => {
   const partidas = await obtenerPartidas();
   if (!partidas) return res.status(500).json({ error: "Error al obtener partidas" });
   res.json(partidas);
+});
+
+// DELETE /api/partidas - Limpiar datos de juego, conservando catalogos
+endpointsPartidas.delete("/", async (req, res) => {
+  const eliminados = await limpiarDatosDePartidas();
+  if (!eliminados) {
+    return res.status(500).json({ error: "No se pudieron limpiar los datos de partidas" });
+  }
+
+  res.json({
+    message: "Datos de partidas limpiados correctamente",
+    eliminados,
+  });
 });
 
 // GET /api/partidas/:id/estado - Estado completo del mapa y la partida

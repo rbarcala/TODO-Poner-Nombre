@@ -6,6 +6,12 @@ const state = {
 
 const API_BASE_URLS = ['http://localhost:8000', 'http://localhost:3000'];
 
+const endpoints = {
+  paises: '/api/paises',
+  tropas: '/api/tipos-tropas',
+  terrenos: '/api/terrenos'
+};
+
 async function apiFetch(path, options = {}) {
   for (const baseUrl of API_BASE_URLS) {
     try {
@@ -19,6 +25,20 @@ async function apiFetch(path, options = {}) {
   }
 
   throw new Error('No se pudo conectar con el servidor');
+}
+
+async function getErrorMessage(response) {
+  const fallback = `HTTP ${response.status}`;
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body = await response.json();
+      return body.error || body.message || fallback;
+    }
+    return await response.text() || fallback;
+  } catch (error) {
+    return fallback;
+  }
 }
 
 function showForm(entity) {
@@ -50,12 +70,12 @@ function renderList(entity, items) {
           <div class="flex justify-between items-start gap-2">
             <div>
               <p class="font-semibold">${item.nombre}</p>
-              <p class="text-slate-400">Eco ${item.economia} · Tec ${item.tecnologia} · Agg ${item.agresividad}</p>
+              <p class="text-slate-400">Eco ${item.economia} - Tec ${item.tecnologia} - Agg ${item.agresividad}</p>
               <p class="text-slate-400">Terreno: ${terreno ? terreno.nombre : 'Sin asignar'}</p>
             </div>
             <div class="flex gap-2">
-              <button data-action="edit" data-entity="paises" data-id="${item.id}" class="text-amber-400">Editar</button>
-              <button data-action="delete" data-entity="paises" data-id="${item.id}" class="text-red-400">Borrar</button>
+              <button type="button" data-action="edit" data-entity="paises" data-id="${item.id}" class="text-amber-400">Editar</button>
+              <button type="button" data-action="delete" data-entity="paises" data-id="${item.id}" class="text-red-400">Borrar</button>
             </div>
           </div>
         </div>`;
@@ -67,12 +87,12 @@ function renderList(entity, items) {
           <div class="flex justify-between items-start gap-2">
             <div>
               <p class="font-semibold">${item.tipo}</p>
-              <p class="text-slate-400">${item.descripcion || 'Sin descripción'}</p>
-              <p class="text-slate-400">Dados ${item.dado_min}-${item.dado_max} · Costo ${item.costo}</p>
+              <p class="text-slate-400">${item.descripcion || 'Sin descripcion'}</p>
+              <p class="text-slate-400">Dados ${item.dado_min}-${item.dado_max}</p>
             </div>
             <div class="flex gap-2">
-              <button data-action="edit" data-entity="tropas" data-id="${item.id}" class="text-amber-400">Editar</button>
-              <button data-action="delete" data-entity="tropas" data-id="${item.id}" class="text-red-400">Borrar</button>
+              <button type="button" data-action="edit" data-entity="tropas" data-id="${item.id}" class="text-amber-400">Editar</button>
+              <button type="button" data-action="delete" data-entity="tropas" data-id="${item.id}" class="text-red-400">Borrar</button>
             </div>
           </div>
         </div>`;
@@ -83,12 +103,12 @@ function renderList(entity, items) {
         <div class="flex justify-between items-start gap-2">
           <div>
             <p class="font-semibold">${item.nombre}</p>
-            <p class="text-slate-400">${item.descripcion || 'Sin descripción'}</p>
-            <p class="text-slate-400">Ataque ${item.modificador_ataque} · Defensa ${item.modificador_defensa}</p>
+            <p class="text-slate-400">${item.descripcion || 'Sin descripcion'}</p>
+            <p class="text-slate-400">Ataque ${item.modificador_ataque} - Defensa ${item.modificador_defensa}</p>
           </div>
           <div class="flex gap-2">
-            <button data-action="edit" data-entity="terrenos" data-id="${item.id}" class="text-amber-400">Editar</button>
-            <button data-action="delete" data-entity="terrenos" data-id="${item.id}" class="text-red-400">Borrar</button>
+            <button type="button" data-action="edit" data-entity="terrenos" data-id="${item.id}" class="text-amber-400">Editar</button>
+            <button type="button" data-action="delete" data-entity="terrenos" data-id="${item.id}" class="text-red-400">Borrar</button>
           </div>
         </div>
       </div>`;
@@ -99,16 +119,18 @@ async function loadTerrenos() {
   const response = await apiFetch('/api/terrenos');
   if (!response.ok) throw new Error('No se pudieron cargar los terrenos');
   state.terrenos = await response.json();
+
   const select = document.querySelector('#form-paises select[name="terreno_id"]');
   if (select) {
     select.innerHTML = state.terrenos.map((t) => `<option value="${t.id}">${t.nombre}</option>`).join('');
   }
+
   renderList('terrenos', state.terrenos);
 }
 
 async function loadPaises() {
   const response = await apiFetch('/api/paises');
-  if (!response.ok) throw new Error('No se pudieron cargar los países');
+  if (!response.ok) throw new Error('No se pudieron cargar los paises');
   state.paises = await response.json();
   renderList('paises', state.paises);
 }
@@ -128,15 +150,19 @@ function resetForm(entity) {
   const form = document.getElementById(`form-${entity}`);
   if (!form) return;
   form.reset();
+
   const idInput = form.querySelector('input[name="id"]');
   if (idInput) {
     idInput.value = '';
   }
+
   hideForms();
 }
 
 async function saveEntity(entity, payload) {
-  const endpoint = entity === 'paises' ? '/api/paises' : entity === 'tropas' ? '/api/tipos-tropas' : '/api/terrenos';
+  const endpoint = endpoints[entity];
+  if (!endpoint) return;
+
   const method = payload.id ? 'PUT' : 'POST';
   const response = await apiFetch(`${endpoint}${payload.id ? `/${payload.id}` : ''}`, {
     method,
@@ -145,7 +171,7 @@ async function saveEntity(entity, payload) {
   });
 
   if (!response.ok) {
-    const error = await response.text();
+    const error = await getErrorMessage(response);
     alert(`No se pudo guardar: ${error}`);
     return;
   }
@@ -155,105 +181,160 @@ async function saveEntity(entity, payload) {
 }
 
 async function deleteEntity(entity, id) {
-  const endpoint = entity === 'paises' ? '/api/paises' : entity === 'tropas' ? '/api/tipos-tropas' : '/api/terrenos';
+  const endpoint = endpoints[entity];
+  if (!endpoint) return;
+
   const response = await apiFetch(`${endpoint}/${id}`, { method: 'DELETE' });
   if (!response.ok) {
-    alert('No se pudo borrar');
+    const error = await getErrorMessage(response);
+    alert(`No se pudo borrar: ${error}`);
     return;
   }
+
   await loadAll();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.add-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      const entity = button.dataset.entity;
-      showForm(entity);
-    });
-  });
+async function clearGameData(button) {
+  if (!confirm('Seguro que queres borrar todas las partidas y datos de juego?')) {
+    return;
+  }
 
-  document.querySelectorAll('.cancel-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      const formId = button.closest('form')?.id || '';
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Limpiando...';
+
+  try {
+    const response = await apiFetch('/api/partidas', { method: 'DELETE' });
+    if (!response.ok) {
+      const error = await getErrorMessage(response);
+      alert(`No se pudieron limpiar las partidas: ${error}`);
+      return;
+    }
+
+    const result = await response.json();
+    const eliminados = result.eliminados || {};
+    alert(
+      `Base limpiada. Partidas: ${eliminados.partidas || 0}, territorios: ${eliminados.territorios || 0}, turnos: ${eliminados.turnos || 0}.`
+    );
+    await loadAll();
+  } catch (error) {
+    alert(`No se pudieron limpiar las partidas: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+function getEntityItems(entity) {
+  if (entity === 'paises') return state.paises;
+  if (entity === 'tropas') return state.tropas;
+  if (entity === 'terrenos') return state.terrenos;
+  return [];
+}
+
+function setFieldValue(form, name, value) {
+  const field = form.querySelector(`[name="${name}"]`);
+  if (field) {
+    field.value = value ?? '';
+  }
+}
+
+async function handleSubmit(form) {
+  const entity = form.id.replace('form-', '');
+  const payload = Object.fromEntries(new FormData(form));
+  const normalized = {};
+
+  if (entity === 'paises') {
+    const terrainId = Number(payload.terreno_id);
+    normalized.id = payload.id ? Number(payload.id) : undefined;
+    normalized.nombre = payload.nombre;
+    normalized.color_hex = payload.color_hex;
+    normalized.economia = Number(payload.economia);
+    normalized.tecnologia = Number(payload.tecnologia);
+    normalized.agresividad = Number(payload.agresividad);
+    normalized.resistencia_terreno_id = Number.isInteger(terrainId) ? terrainId : null;
+  } else if (entity === 'tropas') {
+    normalized.id = payload.id ? Number(payload.id) : undefined;
+    normalized.tipo = payload.tipo;
+    normalized.descripcion = payload.descripcion;
+    normalized.dado_min = Number(payload.dado_min);
+    normalized.dado_max = Number(payload.dado_max);
+  } else {
+    normalized.id = payload.id ? Number(payload.id) : undefined;
+    normalized.nombre = payload.nombre;
+    normalized.descripcion = payload.descripcion;
+    normalized.color_hex = payload.color_hex;
+    normalized.modificador_ataque = Number(payload.modificador_ataque);
+    normalized.modificador_defensa = Number(payload.modificador_defensa);
+  }
+
+  try {
+    await saveEntity(entity, normalized);
+  } catch (error) {
+    alert(`No se pudo guardar: ${error.message}`);
+  }
+}
+
+function initEditor() {
+  document.addEventListener('click', async (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest('button[data-action]') : null;
+
+    const addButton = event.target instanceof HTMLElement ? event.target.closest('.add-btn') : null;
+    if (addButton instanceof HTMLElement) {
+      const entity = addButton.dataset.entity;
+      resetForm(entity);
+      showForm(entity);
+      return;
+    }
+
+    const cancelButton = event.target instanceof HTMLElement ? event.target.closest('.cancel-btn') : null;
+    if (cancelButton instanceof HTMLElement) {
+      const formId = cancelButton.closest('form')?.id || '';
       const entity = formId.replace('form-', '');
       resetForm(entity);
-    });
-  });
+      return;
+    }
 
-  document.querySelectorAll('form').forEach((form) => {
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const entity = form.id.replace('form-', '');
-      const payload = Object.fromEntries(new FormData(form));
-      const normalized = {};
+    const clearButton = event.target instanceof HTMLElement ? event.target.closest('#clear-games-btn') : null;
+    if (clearButton instanceof HTMLButtonElement) {
+      await clearGameData(clearButton);
+      return;
+    }
 
-      if (entity === 'paises') {
-        const terrainId = Number(payload.terreno_id);
-        const terrainName = state.terrenos.find((t) => t.id === terrainId)?.nombre || state.terrenos[0]?.nombre;
-        normalized.id = payload.id ? Number(payload.id) : undefined;
-        normalized.nombre = payload.nombre;
-        normalized.color_hex = payload.color_hex;
-        normalized.economia = Number(payload.economia);
-        normalized.tecnologia = Number(payload.tecnologia);
-        normalized.agresividad = Number(payload.agresividad);
-        normalized.terreno = terrainName;
-      } else if (entity === 'tropas') {
-        normalized.id = payload.id ? Number(payload.id) : undefined;
-        normalized.tipo = payload.tipo;
-        normalized.descripcion = payload.descripcion;
-        normalized.dado_min = Number(payload.dado_min);
-        normalized.dado_max = Number(payload.dado_max);
-        normalized.costo = Number(payload.costo);
-      } else {
-        normalized.id = payload.id ? Number(payload.id) : undefined;
-        normalized.nombre = payload.nombre;
-        normalized.descripcion = payload.descripcion;
-        normalized.color_hex = payload.color_hex;
-        normalized.modificador_ataque = Number(payload.modificador_ataque);
-        normalized.modificador_defensa = Number(payload.modificador_defensa);
-      }
-
-      await saveEntity(entity, normalized);
-    });
-  });
-
-  document.addEventListener('click', async (event) => {
-    const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
     if (target.dataset.action === 'edit') {
       const entity = target.dataset.entity;
       const id = Number(target.dataset.id);
-      const list = entity === 'paises' ? state.paises : entity === 'tropas' ? state.tropas : state.terrenos;
-      const item = list.find((entry) => entry.id === id);
+      const item = getEntityItems(entity).find((entry) => entry.id === id);
       if (!item) return;
 
       const form = document.getElementById(`form-${entity}`);
       if (!form) return;
 
       if (entity === 'paises') {
-        form.querySelector('[name="id"]').value = item.id;
-        form.querySelector('[name="nombre"]').value = item.nombre;
-        form.querySelector('[name="color_hex"]').value = item.color_hex;
-        form.querySelector('[name="economia"]').value = item.economia;
-        form.querySelector('[name="tecnologia"]').value = item.tecnologia;
-        form.querySelector('[name="agresividad"]').value = item.agresividad;
-        form.querySelector('[name="terreno_id"]').value = item.resistencia_terreno_id || '';
+        setFieldValue(form, 'id', item.id);
+        setFieldValue(form, 'nombre', item.nombre);
+        setFieldValue(form, 'color_hex', item.color_hex);
+        setFieldValue(form, 'economia', item.economia);
+        setFieldValue(form, 'tecnologia', item.tecnologia);
+        setFieldValue(form, 'agresividad', item.agresividad);
+        setFieldValue(form, 'terreno_id', item.resistencia_terreno_id);
       } else if (entity === 'tropas') {
-        form.querySelector('[name="id"]').value = item.id;
-        form.querySelector('[name="tipo"]').value = item.tipo;
-        form.querySelector('[name="descripcion"]').value = item.descripcion || '';
-        form.querySelector('[name="dado_min"]').value = item.dado_min;
-        form.querySelector('[name="dado_max"]').value = item.dado_max;
-        form.querySelector('[name="costo"]').value = item.costo;
+        setFieldValue(form, 'id', item.id);
+        setFieldValue(form, 'tipo', item.tipo);
+        setFieldValue(form, 'descripcion', item.descripcion);
+        setFieldValue(form, 'dado_min', item.dado_min);
+        setFieldValue(form, 'dado_max', item.dado_max);
       } else {
-        form.querySelector('[name="id"]').value = item.id;
-        form.querySelector('[name="nombre"]').value = item.nombre;
-        form.querySelector('[name="descripcion"]').value = item.descripcion || '';
-        form.querySelector('[name="color_hex"]').value = item.color_hex;
-        form.querySelector('[name="modificador_ataque"]').value = item.modificador_ataque;
-        form.querySelector('[name="modificador_defensa"]').value = item.modificador_defensa;
+        setFieldValue(form, 'id', item.id);
+        setFieldValue(form, 'nombre', item.nombre);
+        setFieldValue(form, 'descripcion', item.descripcion);
+        setFieldValue(form, 'color_hex', item.color_hex);
+        setFieldValue(form, 'modificador_ataque', item.modificador_ataque);
+        setFieldValue(form, 'modificador_defensa', item.modificador_defensa);
       }
+
       showForm(entity);
       return;
     }
@@ -261,11 +342,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target.dataset.action === 'delete') {
       const entity = target.dataset.entity;
       const id = Number(target.dataset.id);
-      if (confirm('¿Seguro que querés borrar este elemento?')) {
-        await deleteEntity(entity, id);
+      if (confirm('Seguro que queres borrar este elemento?')) {
+        try {
+          await deleteEntity(entity, id);
+        } catch (error) {
+          alert(`No se pudo borrar: ${error.message}`);
+        }
       }
     }
   });
 
-  loadAll();
-});
+  document.addEventListener('submit', async (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.id.startsWith('form-')) return;
+
+    event.preventDefault();
+    await handleSubmit(form);
+  });
+
+  loadAll().catch((error) => {
+    alert(`No se pudo cargar el editor: ${error.message}`);
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEditor);
+} else {
+  initEditor();
+}

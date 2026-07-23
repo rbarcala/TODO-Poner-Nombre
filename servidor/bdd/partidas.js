@@ -228,3 +228,39 @@ export const borrarPartida = async (id) => {
         client.release();
     }
 };
+
+export const limpiarDatosDePartidas = async () => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const conteos = await client.query(`
+            SELECT
+                (SELECT COUNT(*) FROM partidas)::integer AS partidas,
+                (SELECT COUNT(*) FROM paises_partidas)::integer AS paises_partidas,
+                (SELECT COUNT(*) FROM territorios)::integer AS territorios,
+                (SELECT COUNT(*) FROM fronteras)::integer AS fronteras,
+                (SELECT COUNT(*) FROM turnos)::integer AS turnos,
+                (SELECT COUNT(*) FROM movimientos)::integer AS movimientos,
+                (SELECT COUNT(*) FROM tropas_estacionadas)::integer AS tropas_estacionadas,
+                (SELECT COUNT(*) FROM tropas)::integer AS tropas
+        `);
+
+        await client.query('DELETE FROM turnos');
+        await client.query('DELETE FROM movimientos');
+        await client.query('DELETE FROM fronteras');
+        await client.query('DELETE FROM tropas_estacionadas');
+        await client.query('DELETE FROM territorios');
+        await client.query('DELETE FROM paises_partidas');
+        await client.query('DELETE FROM partidas');
+        await client.query('DELETE FROM tropas');
+
+        await client.query('COMMIT');
+        return conteos.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK');
+        return undefined;
+    } finally {
+        client.release();
+    }
+};
