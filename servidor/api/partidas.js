@@ -14,7 +14,7 @@ import { obtenerTiposTropas } from "../bdd/tropas.js";
 
 import { generateMap } from "../logic/mapLogic.js";
 import { validateDeploymentAction, validateMoveAction } from "../logic/actionValidators.js";
-import { resolveCombat } from "../logic/gameLogic.js";
+import { resolveCombat, buildTroopList } from "../logic/gameLogic.js";
 import { getNextActivePlayer, checkVictoryCondition, executeBotTurn } from "../logic/turnManager.js";
 
 export const endpointsPartidas = Router();
@@ -38,26 +38,33 @@ endpointsPartidas.get("/:id/estado", async (req, res) => {
 endpointsPartidas.post("/", async (req, res) => {
   const { nombre, paises_ids, filas, columnas } = req.body;
 
-  let paisesIds = paises_ids;
+  let paisesIds = Array.isArray(paises_ids)
+    ? paises_ids.filter((id) => Number.isInteger(Number(id)) && Number(id) > 0).map((id) => Number(id))
+    : [];
 
-  if (!paisesIds || !Array.isArray(paisesIds) || paisesIds.length === 0) {
+  if (paisesIds.length === 0) {
     const todosPaises = await obtenerPaises();
     if (!todosPaises || todosPaises.length === 0) {
       return res.status(400).json({ error: "No hay países registrados en la base de datos." });
     }
-    paisesIds = todosPaises.slice(0, 4).map(p => p.id);
+    paisesIds = todosPaises.slice(0, 4).map((p) => p.id);
+  }
+
+  if (paisesIds.length > 4) {
+    paisesIds = paisesIds.slice(0, 4);
   }
 
   const terrenosCat = await obtenerTerrenos();
-  const terrenosIds = (terrenosCat && terrenosCat.length > 0) 
-    ? terrenosCat.map(t => t.id) 
+  const terrenosIds = (terrenosCat && terrenosCat.length > 0)
+    ? terrenosCat.map((t) => t.id)
     : [1];
 
+  const tiposTropa = await obtenerTiposTropas();
   const numFilas = Number.isInteger(filas) && filas >= 2 ? filas : undefined;
   const numColumnas = Number.isInteger(columnas) && columnas >= 2 ? columnas : undefined;
   const mapaGenerado = generateMap(numFilas, numColumnas, paisesIds, terrenosIds);
 
-  const partidaCreada = await crearPartidaConMapa(nombre, paisesIds, mapaGenerado);
+  const partidaCreada = await crearPartidaConMapa(nombre, paisesIds, mapaGenerado, tiposTropa || []);
 
   if (!partidaCreada) {
     return res.status(500).json({ error: "Error al crear la partida en base de datos." });
@@ -90,8 +97,9 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
     return res.status(400).json({ errors: validation.errors });
   }
 
+  const tiposTropa = await obtenerTiposTropas();
   const nuevasTropas = (territorioTarget.tropas_actuales || 1) + cantidad;
-  await actualizarTerritorio(territorio_id, territorioTarget.pais_duenio_id, nuevasTropas);
+  await actualizarTerritorio(territorio_id, territorioTarget.pais_duenio_id, nuevasTropas, tiposTropa || []);
 
   const estadoActualizado = await obtenerEstadoCompletoPartida(partidaId);
   res.json(estadoActualizado);
@@ -117,8 +125,9 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
     });
   }
 
-  await actualizarTerritorio(origen.id, origen.pais_duenio_id, origen.tropas_actuales - tropas);
-  await actualizarTerritorio(destino.id, destino.pais_duenio_id, destino.tropas_actuales + tropas);
+  const tiposTropa = await obtenerTiposTropas();
+  await actualizarTerritorio(origen.id, origen.pais_duenio_id, origen.tropas_actuales - tropas, tiposTropa || []);
+  await actualizarTerritorio(destino.id, destino.pais_duenio_id, destino.tropas_actuales + tropas, tiposTropa || []);
 
   const estadoActualizado = await obtenerEstadoCompletoPartida(partidaId);
   res.json(estadoActualizado);
@@ -142,10 +151,8 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   }
 
   const catalogTropas = await obtenerTiposTropas();
-  const defaultTroop = (catalogTropas && catalogTropas.length > 0) ? catalogTropas[0] : { dado_min: 1, dado_max: 6 };
-
-  const attackingTroopsList = Array(tropas_atacantes).fill(defaultTroop);
-  const defendingTroopsList = Array(destino.tropas_actuales || 1).fill(defaultTroop);
+  const attackingTroopsList = buildTroopList(tropas_atacantes, catalogTropas || []);
+  const defendingTroopsList = buildTroopList(destino.tropas_actuales || 1, catalogTropas || []);
 
   const attackerObj = { id: activePlayerId, resistencia_terreno_id: null };
   const defenderObj = destino.pais_duenio_id ? { id: destino.pais_duenio_id } : null;
@@ -158,10 +165,10 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   const result = resolveCombat(attackerObj, defenderObj, terrainObj, attackingTroopsList, defendingTroopsList);
 
   if (result.attackerWins) {
-    await actualizarTerritorio(destino.id, activePlayerId, tropas_atacantes);
-    await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes);
+    await actualizarTerritorio(destino.id, activePlayerId, tropas_atacantes, catalogTropas || []);
+    await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes, catalogTropas || []);
   } else {
-    await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes);
+    await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes, catalogTropas || []);
   }
 
   const estadoPostCombate = await obtenerEstadoCompletoPartida(partidaId);
@@ -202,8 +209,9 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
     botLog = executeBotTurn(paisActivoObj, estado.territorios, estado.fronteras, estado.paises, catalogTropas || []);
 
     if (botLog.updatedTerritories) {
+      const catalogTropas = await obtenerTiposTropas();
       for (const t of botLog.updatedTerritories) {
-        await actualizarTerritorio(t.id, t.pais_duenio_id, t.tropas_actuales);
+        await actualizarTerritorio(t.id, t.pais_duenio_id, t.tropas_actuales, catalogTropas || []);
       }
     }
 

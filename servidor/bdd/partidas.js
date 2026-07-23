@@ -165,7 +165,7 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
     }
 };
 
-export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasActuales) => {
+export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasActuales, troopTypesCatalog = []) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -181,7 +181,7 @@ export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasAct
             return undefined;
         }
 
-        await guardarTropasEstacionadas(client, territorioId, tropasActuales);
+        await guardarTropasEstacionadas(client, territorioId, tropasActuales, troopTypesCatalog);
         await client.query('COMMIT');
         return resultado.rows[0];
     } catch (error) {

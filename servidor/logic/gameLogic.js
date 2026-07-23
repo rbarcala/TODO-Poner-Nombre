@@ -48,6 +48,18 @@ export function rollDie(min, max) {
     return Math.floor(Math.random() * (dadoMax - dadoMin + 1)) + dadoMin;
 }
 
+export function buildTroopList(count, troopTypesCatalog = []) {
+    const normalizedCount = Number.isInteger(count) && count > 0 ? count : 0;
+    const normalizedCatalog = (troopTypesCatalog || []).filter(Boolean);
+
+    if (normalizedCount <= 0) return [];
+    if (normalizedCatalog.length === 0) {
+        return Array(normalizedCount).fill({ dado_min: 1, dado_max: 6 });
+    }
+
+    return Array.from({ length: normalizedCount }, (_, index) => normalizedCatalog[index % normalizedCatalog.length]);
+}
+
 /**
  * Resuelve un combate entre tropas atacantes y defensoras.
  * 
