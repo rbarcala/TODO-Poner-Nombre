@@ -50,7 +50,7 @@ function dibujarGrafo(territorios, fronteras) {
         tooltip.style.top = `${event.clientY + 15}px`;
     });
 
-    // Cálculo dinámico del ViewBox
+    //Calculo dinamico ViewBox
     let maxCoordX = 0;
     let maxCoordY = 0;
     territorios.forEach(t => {
@@ -62,7 +62,7 @@ function dibujarGrafo(territorios, fronteras) {
     const altoTotal = (maxCoordY * ESCALA) + (OFFSET_Y * 2);
     svg.setAttribute('viewBox', `0 0 ${anchoTotal} ${altoTotal}`);
 
-    // 1. Dibujar fronteras
+    //Dibujar fronteras
     fronteras.forEach(frontera => {
         const origen = territorios.find(t => t.id === frontera.id_territorio_origen);
         const destino = territorios.find(t => t.id === frontera.id_territorio_destino);
@@ -79,7 +79,7 @@ function dibujarGrafo(territorios, fronteras) {
         }
     });
 
-    // 2. Dibujar territorios
+    //Dibujar territorios
     territorios.forEach(territorio => {
         const centroX = (territorio.coord_x * ESCALA) + OFFSET_X;
         const centroY = (territorio.coord_y * ESCALA) + OFFSET_Y;
@@ -95,7 +95,7 @@ function dibujarGrafo(territorios, fronteras) {
         circulo.setAttribute('fill', territorio.pais_duenio_color || '#94a3b8'); 
         
         if (esElSeleccionado) {
-            circulo.setAttribute('stroke', '#f59e0b'); // amber-500
+            circulo.setAttribute('stroke', '#f59e0b');
             circulo.setAttribute('stroke-width', '8');
         } else {
             circulo.setAttribute('stroke', '#0f172a');
@@ -215,8 +215,8 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const btnMover = document.getElementById('btn-mover');
     const panelMover = document.getElementById('panel-mover-tropas');
+    const panelAcciones = document.getElementById('panel-acciones');
 
-    // 1. Activar el "Modo Mover"
     if (btnMover) {
         btnMover.addEventListener('click', () => {
             if (!territorioSeleccionado) return;
@@ -225,6 +225,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             panelMover.classList.remove('hidden');
             panelMover.style.display = 'block';
+            
+            if (panelAcciones) {
+                panelAcciones.style.display = 'none';
+            }
         });
     }
     document.addEventListener('mousemove', (e) => {
@@ -252,7 +256,10 @@ async function onTerritorioClickeado(territorioDestino) {
             return;
         }
         const cantidadStr = prompt(`¿Cuántas tropas querés mover de ${territorioOrigenMover.nombre || 'origen'} a ${territorioDestino.nombre || 'destino'}?`);
-        if (cantidadStr === null || cantidadStr.trim() === '') return;
+        if (cantidadStr === null || cantidadStr.trim() === '') {
+            deseleccionarTerritorio();
+            return;
+        }
 
         const cantidad = parseInt(cantidadStr, 10);
         if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
@@ -263,7 +270,6 @@ async function onTerritorioClickeado(territorioDestino) {
             const partidaId = new URLSearchParams(window.location.search).get('id');
             const nuevoEstado = await apiMoverTropas(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
             
-            // Actualizamos la pantalla y cerramos el menú
             estadoJuego = nuevoEstado;
             deseleccionarTerritorio(); 
             
