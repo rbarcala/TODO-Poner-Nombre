@@ -18,7 +18,7 @@ export const obtenerTipoTropa = async (id) => {
     }
 };
 
-export const crearTipoTropa = async (tipo, descripcion, dado_min, dado_max) => {
+export const crearTipoTropa = async (tipo, descripcion, dado_min = 1, dado_max = 6, costo = 1) => {
     try {
         const query = `
             INSERT INTO tipos_de_tropas (tipo, descripcion, dado_min, dado_max, costo) 
@@ -29,7 +29,7 @@ export const crearTipoTropa = async (tipo, descripcion, dado_min, dado_max) => {
         const resultado = await pool.query(query, valores);
         return resultado.rows[0];
     } catch (error) {
-        return undefined;
+        console.error("Error en crearTipoTropa:", error);
     }
 };
 
@@ -41,7 +41,7 @@ export const editarTipoTropa = async (id, tipo, descripcion, dado_min, dado_max,
       WHERE id = $6
       RETURNING *
     `;
-    
+
     const valores = [tipo, descripcion, dado_min, dado_max, costo, id];
     const resultado = await pool.query(query, valores);
     
