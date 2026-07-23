@@ -7,7 +7,9 @@ import {
   actualizarTerritorio,
   actualizarEstadoPartida,
   borrarPartida,
-  limpiarDatosDePartidas
+  limpiarDatosDePartidas,
+  incrementarMovimientosPartida,
+  resetearMovimientosPartida
 } from "../bdd/partidas.js";
 import { obtenerPaises } from "../bdd/paises.js";
 import { obtenerTerrenos } from "../bdd/terrenos.js";
@@ -95,7 +97,10 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   const { territorio_id } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
-  if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
+  const movimientosActuales = estado.partida.movimientos_realizados || 0;
+  if (movimientosActuales >= 2) {
+    return res.status(400).json({ error: "Has alcanzado el límite máximo de 2 acciones por turno. Debes pasar el turno." });
+  }
 
   const activePlayerId = estado.partida.turno_actual;
 
@@ -120,6 +125,8 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   const nuevasTropas = (territorioTarget.tropas_actuales || 1) + cantidad;
   await actualizarTerritorio(territorio_id, territorioTarget.pais_duenio_id, nuevasTropas, tiposTropa || []);
 
+  await incrementarMovimientosPartida(partidaId);
+
   const estadoActualizado = await obtenerEstadoCompletoPartida(partidaId);
   res.json(estadoActualizado);
 });
@@ -131,6 +138,11 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
+
+  const movimientosActuales = estado.partida.movimientos_realizados || 0;
+  if (movimientosActuales >= 2) {
+    return res.status(400).json({ error: "Has alcanzado el límite máximo de 2 acciones/movimientos por turno. Debes pasar el turno." });
+  }
 
   const origen = estado.territorios.find(t => t.id === origen_id);
   const destino = estado.territorios.find(t => t.id === destino_id);
@@ -148,6 +160,8 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
   await actualizarTerritorio(origen.id, origen.pais_duenio_id, origen.tropas_actuales - tropas, tiposTropa || []);
   await actualizarTerritorio(destino.id, destino.pais_duenio_id, destino.tropas_actuales + tropas, tiposTropa || []);
 
+  await incrementarMovimientosPartida(partidaId);
+
   const estadoActualizado = await obtenerEstadoCompletoPartida(partidaId);
   res.json(estadoActualizado);
 });
@@ -159,6 +173,11 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
+
+  const movimientosActuales = estado.partida.movimientos_realizados || 0;
+  if (movimientosActuales >= 2) {
+    return res.status(400).json({ error: "Has alcanzado el límite máximo de 2 acciones/movimientos por turno. Debes pasar el turno." });
+  }
 
   const origen = estado.territorios.find(t => t.id === origen_id);
   const destino = estado.territorios.find(t => t.id === destino_id);
@@ -189,6 +208,8 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   } else {
     await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes, catalogTropas || []);
   }
+
+  await incrementarMovimientosPartida(partidaId);
 
   const estadoPostCombate = await obtenerEstadoCompletoPartida(partidaId);
 
@@ -258,6 +279,9 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
     await actualizarEstadoPartida(partidaId, proximoTurno, 'en_curso');
     estado = await obtenerEstadoCompletoPartida(partidaId);
   }
+
+  await resetearMovimientosPartida(partidaId);
+  estado = await obtenerEstadoCompletoPartida(partidaId);
 
   res.json({
     siguientePaisId: estado.partida.turno_actual,

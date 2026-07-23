@@ -132,7 +132,7 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
             SELECT t.*, tt.nombre as tipo_terreno_nombre, tt.color_hex as terreno_color,
                    tt.modificador_ataque, tt.modificador_defensa,
                    p.nombre as pais_duenio_nombre, p.color_hex as pais_duenio_color,
-                   COUNT(te.id_tropa)::integer as tropas_actuales
+                   GREATEST(COUNT(te.id_tropa)::integer, 1) as tropas_actuales
             FROM territorios t
             LEFT JOIN tipos_de_terreno tt ON t.tipo_terreno_id = tt.id
             LEFT JOIN paises p ON t.pais_duenio_id = p.id
@@ -192,13 +192,49 @@ export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasAct
     }
 };
 
+export const asegurarColumnaMovimientos = async () => {
+    try {
+        await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS movimientos_realizados INTEGER DEFAULT 0;');
+    } catch (e) {
+        // Ignorar si ya existe
+    }
+};
+
+export const incrementarMovimientosPartida = async (partidaId) => {
+    await asegurarColumnaMovimientos();
+    try {
+        const res = await pool.query(
+            'UPDATE partidas SET movimientos_realizados = COALESCE(movimientos_realizados, 0) + 1 WHERE id = $1 RETURNING *',
+            [partidaId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
+    }
+};
+
+export const resetearMovimientosPartida = async (partidaId) => {
+    await asegurarColumnaMovimientos();
+    try {
+        const res = await pool.query(
+            'UPDATE partidas SET movimientos_realizados = 0 WHERE id = $1 RETURNING *',
+            [partidaId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
+    }
+};
+
 export const actualizarEstadoPartida = async (partidaId, turnoActualPaisId, estado, paisGanadorId = null) => {
+    await asegurarColumnaMovimientos();
     try {
         const query = `
             UPDATE partidas 
             SET turno_actual = COALESCE($1, turno_actual), 
                 estado = COALESCE($2, estado), 
-                pais_ganador_id = COALESCE($3, pais_ganador_id) 
+                pais_ganador_id = COALESCE($3, pais_ganador_id),
+                movimientos_realizados = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN 0 ELSE movimientos_realizados END
             WHERE id = $4 
             RETURNING *
         `;

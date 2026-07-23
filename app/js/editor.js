@@ -64,14 +64,14 @@ function renderList(entity, items) {
 
   container.innerHTML = items.map((item) => {
     if (entity === 'paises') {
-      const terreno = state.terrenos.find((t) => t.id === item.resistencia_terreno_id);
+      const terreno = state.terrenos.find((t) => t.id === (item.resistencia_terreno_id || item.terreno_id));
       return `
         <div class="rounded-lg border border-slate-800 p-3 text-sm">
           <div class="flex justify-between items-start gap-2">
             <div>
               <p class="font-semibold">${item.nombre}</p>
-              <p class="text-slate-400">Eco ${item.economia} - Tec ${item.tecnologia} - Agg ${item.agresividad}</p>
-              <p class="text-slate-400">Terreno: ${terreno ? terreno.nombre : 'Sin asignar'}</p>
+              <p class="text-slate-400">Eco: ${item.economia} - Tec: ${item.tecnologia} - Agr: ${item.agresividad}</p>
+              <p class="text-slate-400">Resistencia: ${terreno ? terreno.nombre : 'Sin asignar'}</p>
             </div>
             <div class="flex gap-2">
               <button type="button" data-action="edit" data-entity="paises" data-id="${item.id}" class="text-amber-400">Editar</button>
@@ -88,7 +88,7 @@ function renderList(entity, items) {
             <div>
               <p class="font-semibold">${item.tipo}</p>
               <p class="text-slate-400">${item.descripcion || 'Sin descripcion'}</p>
-              <p class="text-slate-400">Dados ${item.dado_min}-${item.dado_max}</p>
+              <p class="text-slate-400">Dados: ${item.dado_min} a ${item.dado_max} - Costo: ${item.costo}</p>
             </div>
             <div class="flex gap-2">
               <button type="button" data-action="edit" data-entity="tropas" data-id="${item.id}" class="text-amber-400">Editar</button>
@@ -104,7 +104,7 @@ function renderList(entity, items) {
           <div>
             <p class="font-semibold">${item.nombre}</p>
             <p class="text-slate-400">${item.descripcion || 'Sin descripcion'}</p>
-            <p class="text-slate-400">Ataque ${item.modificador_ataque} - Defensa ${item.modificador_defensa}</p>
+            <p class="text-slate-400">Ataque: ${item.modificador_ataque} - Defensa: ${item.modificador_defensa}</p>
           </div>
           <div class="flex gap-2">
             <button type="button" data-action="edit" data-entity="terrenos" data-id="${item.id}" class="text-amber-400">Editar</button>
@@ -164,7 +164,9 @@ async function saveEntity(entity, payload) {
   if (!endpoint) return;
 
   const method = payload.id ? 'PUT' : 'POST';
-  const response = await apiFetch(`${endpoint}${payload.id ? `/${payload.id}` : ''}`, {
+  const url = payload.id ? `${endpoint}/${payload.id}` : endpoint;
+
+  const response = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -240,27 +242,32 @@ function setFieldValue(form, name, value) {
 }
 
 async function handleSubmit(form) {
-  const entity = form.id.replace('form-', '');
+  const formId = form.getAttribute('id') || '';
+  const entity = formId.replace('form-', '');
   const payload = Object.fromEntries(new FormData(form));
   const normalized = {};
 
   if (entity === 'paises') {
     const terrainId = Number(payload.terreno_id);
-    normalized.id = payload.id ? Number(payload.id) : undefined;
+    if (payload.id) normalized.id = Number(payload.id);
     normalized.nombre = payload.nombre;
     normalized.color_hex = payload.color_hex;
     normalized.economia = Number(payload.economia);
     normalized.tecnologia = Number(payload.tecnologia);
     normalized.agresividad = Number(payload.agresividad);
-    normalized.resistencia_terreno_id = Number.isInteger(terrainId) ? terrainId : null;
+    
+    const resId = Number.isInteger(terrainId) && terrainId > 0 ? terrainId : null;
+    normalized.resistencia_terreno_id = resId;
+    normalized.terreno_id = resId;
   } else if (entity === 'tropas') {
-    normalized.id = payload.id ? Number(payload.id) : undefined;
+    if (payload.id) normalized.id = Number(payload.id);
     normalized.tipo = payload.tipo;
     normalized.descripcion = payload.descripcion;
     normalized.dado_min = Number(payload.dado_min);
     normalized.dado_max = Number(payload.dado_max);
+    normalized.costo = Number(payload.costo);
   } else {
-    normalized.id = payload.id ? Number(payload.id) : undefined;
+    if (payload.id) normalized.id = Number(payload.id);
     normalized.nombre = payload.nombre;
     normalized.descripcion = payload.descripcion;
     normalized.color_hex = payload.color_hex;
@@ -319,13 +326,14 @@ function initEditor() {
         setFieldValue(form, 'economia', item.economia);
         setFieldValue(form, 'tecnologia', item.tecnologia);
         setFieldValue(form, 'agresividad', item.agresividad);
-        setFieldValue(form, 'terreno_id', item.resistencia_terreno_id);
+        setFieldValue(form, 'terreno_id', item.resistencia_terreno_id || item.terreno_id);
       } else if (entity === 'tropas') {
         setFieldValue(form, 'id', item.id);
         setFieldValue(form, 'tipo', item.tipo);
         setFieldValue(form, 'descripcion', item.descripcion);
         setFieldValue(form, 'dado_min', item.dado_min);
         setFieldValue(form, 'dado_max', item.dado_max);
+        setFieldValue(form, 'costo', item.costo);
       } else {
         setFieldValue(form, 'id', item.id);
         setFieldValue(form, 'nombre', item.nombre);
@@ -352,12 +360,16 @@ function initEditor() {
     }
   });
 
-  document.addEventListener('submit', async (event) => {
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement) || !form.id.startsWith('form-')) return;
-
-    event.preventDefault();
-    await handleSubmit(form);
+  // Escuchamos directamente el submit en cada formulario garantizando que e.target sea el HTMLFormElement
+  ['paises', 'tropas', 'terrenos'].forEach((entity) => {
+    const form = document.getElementById(`form-${entity}`);
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await handleSubmit(form);
+      });
+    }
   });
 
   loadAll().catch((error) => {
