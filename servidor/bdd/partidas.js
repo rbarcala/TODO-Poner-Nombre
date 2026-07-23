@@ -132,7 +132,7 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
             SELECT t.*, tt.nombre as tipo_terreno_nombre, tt.color_hex as terreno_color,
                    tt.modificador_ataque, tt.modificador_defensa,
                    p.nombre as pais_duenio_nombre, p.color_hex as pais_duenio_color,
-                   COUNT(te.id_tropa)::integer as tropas_actuales
+                   GREATEST(COUNT(te.id_tropa)::integer, 1) as tropas_actuales
             FROM territorios t
             LEFT JOIN tipos_de_terreno tt ON t.tipo_terreno_id = tt.id
             LEFT JOIN paises p ON t.pais_duenio_id = p.id

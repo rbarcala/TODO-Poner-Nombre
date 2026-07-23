@@ -326,7 +326,8 @@ function actualizarInfoTurno() {
     if (info && estadoJuego && estadoJuego.partida && estadoJuego.paises) {
         const paisActivo = estadoJuego.paises.find(p => p.pais_id === estadoJuego.partida.turno_actual || p.id === estadoJuego.partida.turno_actual);
         const nombrePais = paisActivo ? (paisActivo.nombre || paisActivo.pais_nombre) : `País #${estadoJuego.partida.turno_actual}`;
-        info.innerHTML = `Turno de: <strong>${nombrePais}</strong><br><span style="font-size:11px; opacity:0.9;">Acciones del turno (reforzar/mover/atacar): ${movsUsados}/2</span>`;
+        const movsUsados = estadoJuego.partida?.movimientos_realizados || 0;
+        info.innerHTML = `Turno de: <strong>${nombrePais}</strong><br><span style="font-size:11px; opacity:0.9;">Acciones del turno: ${movsUsados}/2</span>`;
     }
 }
 
