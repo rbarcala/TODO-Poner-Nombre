@@ -21,7 +21,8 @@ services:
       DB_PASS: "contraseña"
       DB_NAME: "bdd"
     depends_on:
-      - bdd
+      bdd:
+        condition: service_healthy # Asegura que el servidor espere a que Postgres esté 100% listo
 
   bdd:
     image: postgres:18-alpine
@@ -29,18 +30,17 @@ services:
       POSTGRES_USER: "usuario"
       POSTGRES_PASSWORD: "contraseña"
       POSTGRES_DB: "bdd"
+    ports:
+      - "5432:5432" # Expuesto para conectar clientes como DBeaver o TablePlus desde tu PC
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usuario -d bdd"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
     volumes:
-      - ./data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql # Usar un volumen con nombre en vez de ./data evita conflictos de permisos en Linux/Windows
       - ./01_esquema_bdd.sql:/docker-entrypoint-initdb.d/01_esquema_bdd.sql:ro
       - ./02_seeds.sql:/docker-entrypoint-initdb.d/02_seeds.sql:ro
-  seed:
-    image: postgres:18-alpine
-    depends_on:
-      - bdd
-    volumes:
-      - ./02_seeds.sql:/seeds/02_seeds.sql:ro
-    environment:
-      PGPASSWORD: "contraseña"
-    command: >
-      sh -c "sleep 3 &&
-      psql -h bdd -U usuario -d bdd -f /seeds/02_seeds.sql"
+
+volumes:
+  postgres_data:
