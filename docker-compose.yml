@@ -7,7 +7,7 @@ services:
     volumes:
       - ./app:/app
       - /app/node_modules
-    command: sh -c "npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css && (npx @tailwindcss/cli -i ./css/input.css -o ./css/output.css --watch --poll & npx http-server -p \$${PORT:-8080} -c-1)"
+    command: sh -c "npx http-server . -p \$${PORT:-8080} -c-1"
 
   servidor:
     build:
