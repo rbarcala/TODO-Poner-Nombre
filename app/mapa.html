@@ -5,23 +5,137 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mapa de la Partida</title>
     <link href="./css/output.css" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            transition: background-color 180ms ease, color 180ms ease;
+            background-color: #0f172a;
+            color: #f8fafc;
+            --panel-bg: rgba(2, 6, 23, 0.82);
+            --panel-border: rgba(148, 163, 184, 0.35);
+            --panel-text: #f8fafc;
+            --panel-muted: #cbd5e1;
+            --line-stroke: #475569;
+            --neutral-fill: #94a3b8;
+        }
+
+        body[data-theme="dark"] {
+            color-scheme: dark;
+            background-color: #0f172a;
+            color: #f8fafc;
+            --panel-bg: rgba(2, 6, 23, 0.82);
+            --panel-border: rgba(148, 163, 184, 0.35);
+            --panel-text: #f8fafc;
+            --panel-muted: #cbd5e1;
+            --line-stroke: #475569;
+            --neutral-fill: #94a3b8;
+        }
+
+        body[data-theme="light"] {
+            color-scheme: light;
+            background-color: #c79b73;
+            color: #3f2b1d;
+            --panel-bg: rgba(255, 247, 237, 0.86);
+            --panel-border: rgba(120, 53, 15, 0.25);
+            --panel-text: #3f2b1d;
+            --panel-muted: #5a3821;
+            --line-stroke: #8b5e3c;
+            --neutral-fill: #e7d1b8;
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-color: var(--panel-border);
+            color: var(--panel-text);
+        }
+
+        .panel-muted {
+            color: var(--panel-muted);
+        }
+
+        .theme-toggle {
+            background-color: var(--panel-bg);
+            color: var(--panel-text);
+            border-color: var(--panel-border);
+        }
+    </style>
 </head>
-<body class="h-screen w-screen bg-slate-900 overflow-hidden relative text-white">
+<body class="h-screen w-screen overflow-hidden relative" data-theme="dark">
 
     <!--Para inyectar circulos y lineas (territorios y fronteras) desde js-->
-    <svg id="lienzo-mapa" class="w-full h-full absolute top-0 left-0 z-10"></svg>
+    <svg id="lienzo-mapa" class="absolute inset-0 z-10 w-full h-full"></svg>
 
-    <!--Interfaz por encima del mapa-->
-    <div class="absolute top-4 left-4 z-20 bg-slate-950/80 p-4 rounded border border-slate-700">
-        <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
-        <p class="text-sm text-slate-300">Selecciona un territorio para accionar</p>
+    <div class="panel absolute top-4 left-4 z-20 p-4 rounded border shadow-lg flex flex-col gap-3">
+        <div>
+            <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
+            <p id="turno-actual-info" class="panel-muted text-sm font-semibold mt-1">Turno de: cargando...</p>
+        </div>
+        <button id="btn-pasar-turno" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded shadow transition-all active:scale-95 text-sm cursor-pointer flex items-center justify-center gap-1">
+            ⏩ Pasar Turno (IA)
+        </button>
     </div>
+
+    <button id="theme-toggle" style="position: fixed !important; top: 1rem !important; right: 1rem !important; left: auto !important; z-index: 99999 !important;" class="theme-toggle h-11 w-11 rounded border shadow-lg flex items-center justify-center text-lg" aria-label="Cambiar tema" title="Cambiar tema">
+        <span id="theme-icon">☀️</span>
+    </button>
 
     <!--Hover sobre los territorios-->
     <div id="tooltip"
         style="background-color: #F54927; color: #000000; border-color: #B93A20; z-index: 9999;"
         class="absolute hidden pointer-events-none z-[9999]
         text-sm p-2 rounded border shadow-lg empty:hidden">
+    </div>
+
+    <div id="panel-acciones" 
+         style="z-index: 999; display: none; position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); background-color: rgba(15, 23, 42, 0.95); border: 1px solid #334155; padding: 16px; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); flex-direction: column; align-items: center; gap: 12px; color: white; min-width: 300px; font-family: sans-serif;">
+        
+        <div style="text-align: center;">
+            <h3 id="panel-titulo" style="font-weight: bold; font-size: 18px; color: #F4A60B; margin: 0 0 4px 0;">Territorio</h3>
+            <p id="panel-subtitulo" style="font-size: 12px; color: #94a3b8; margin: 0;">Elige una acción</p>
+        </div>
+        
+        <div style="display: flex; gap: 8px; width: 100%; margin-top: 10px; margin-bottom: 10px;">
+            <button id="btn-reforzar" style="flex: 1; background-color: #F5276C; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">Reforzar</button>
+            <button id="btn-mover" style="flex: 1; background-color: #F4A60B; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">Mover</button>
+            <button id="btn-atacar" style="flex: 1; background-color: #F54927; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">Atacar</button>
+        </div>
+        
+        <span style="font-size: 11px; color: #64748b;">Presioná <kbd style="background-color: #1e293b; padding: 2px 4px; border-radius: 4px;">ESC</kbd> o clic de nuevo para deseleccionar</span>
+    </div>
+
+    <div id="panel-mover-tropas" 
+        style="z-index: 999; display: none; background-color: #1C1D1D; color: #94a3b8; transform: translateX(-50%);"
+        class="absolute hidden pointer-events-none z-[9999] text-sm p-2 rounded border shadow-lg">
+        <div style="text-align: center;">
+            <h4>Seleccione un territorio destino</h4>
+        </div>
+    </div>
+
+    <div id="panel-atacar"
+        style="z-index: 999; display: none; background-color: #1C1D1D; color: #94a3b8; transform: translateX(-50%);"
+        class="absolute hidden pointer-events-none z-[9999] text-sm p-2 rounded border shadow-lg">
+        <div style="text-align: center;">
+            <h4>Seleccione el territorio enemigo a atacar</h4>
+        </div>
+    </div>
+
+    <!-- Modal de Victoria y Fin de Partida -->
+    <div id="modal-victoria" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md">
+        <div class="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900/95 p-8 text-center shadow-2xl space-y-6">
+            <div class="text-6xl animate-bounce">🏆</div>
+            <div>
+                <h2 class="text-3xl font-extrabold text-amber-400 uppercase tracking-wide">¡Victoria Cumplida!</h2>
+                <p id="victoria-mensaje" class="text-slate-300 text-base mt-3 font-medium">El imperio ha conquistado todos los territorios del mapa.</p>
+            </div>
+            <div class="pt-2">
+                <a href="index.html" class="inline-block w-full bg-gradient-to-r from-red-700 to-amber-600 hover:from-red-600 hover:to-amber-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg transition-all duration-200 uppercase tracking-wider text-sm active:scale-95">
+                    🏠 Volver al Menú Principal
+                </a>
+            </div>
+        </div>
     </div>
 
     <script src="./js/mapa.js"></script>

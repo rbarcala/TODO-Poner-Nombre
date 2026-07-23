@@ -86,7 +86,7 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
                 [partida.id, t.nombre || `Sector (${t.x},${t.y})`, t.x, t.y, t.tipo_terreno_id, t.pais_duenio_id]
             );
             const territorioGuardado = resTerritorio.rows[0];
-            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales || 3);
+            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales ?? 3);
             idMap.set(t.id, territorioGuardado.id);
         }
 
@@ -132,7 +132,7 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
             SELECT t.*, tt.nombre as tipo_terreno_nombre, tt.color_hex as terreno_color,
                    tt.modificador_ataque, tt.modificador_defensa,
                    p.nombre as pais_duenio_nombre, p.color_hex as pais_duenio_color,
-                   COALESCE(COUNT(te.id_tropa), 1)::integer as tropas_actuales
+                   COUNT(te.id_tropa)::integer as tropas_actuales
             FROM territorios t
             LEFT JOIN tipos_de_terreno tt ON t.tipo_terreno_id = tt.id
             LEFT JOIN paises p ON t.pais_duenio_id = p.id
@@ -165,7 +165,7 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
     }
 };
 
-export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasActuales) => {
+export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasActuales, troopTypesCatalog = []) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -181,7 +181,7 @@ export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasAct
             return undefined;
         }
 
-        await guardarTropasEstacionadas(client, territorioId, tropasActuales);
+        await guardarTropasEstacionadas(client, territorioId, tropasActuales, troopTypesCatalog);
         await client.query('COMMIT');
         return resultado.rows[0];
     } catch (error) {
@@ -224,6 +224,42 @@ export const borrarPartida = async (id) => {
     } catch (error) {
         await client.query('ROLLBACK');
         return false;
+    } finally {
+        client.release();
+    }
+};
+
+export const limpiarDatosDePartidas = async () => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const conteos = await client.query(`
+            SELECT
+                (SELECT COUNT(*) FROM partidas)::integer AS partidas,
+                (SELECT COUNT(*) FROM paises_partidas)::integer AS paises_partidas,
+                (SELECT COUNT(*) FROM territorios)::integer AS territorios,
+                (SELECT COUNT(*) FROM fronteras)::integer AS fronteras,
+                (SELECT COUNT(*) FROM turnos)::integer AS turnos,
+                (SELECT COUNT(*) FROM movimientos)::integer AS movimientos,
+                (SELECT COUNT(*) FROM tropas_estacionadas)::integer AS tropas_estacionadas,
+                (SELECT COUNT(*) FROM tropas)::integer AS tropas
+        `);
+
+        await client.query('DELETE FROM turnos');
+        await client.query('DELETE FROM movimientos');
+        await client.query('DELETE FROM fronteras');
+        await client.query('DELETE FROM tropas_estacionadas');
+        await client.query('DELETE FROM territorios');
+        await client.query('DELETE FROM paises_partidas');
+        await client.query('DELETE FROM partidas');
+        await client.query('DELETE FROM tropas');
+
+        await client.query('COMMIT');
+        return conteos.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK');
+        return undefined;
     } finally {
         client.release();
     }
