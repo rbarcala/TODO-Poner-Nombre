@@ -8,6 +8,7 @@ let estadoJuego = null;
 let territorioSeleccionado = null;
 let modoMoverActivo = false;
 let territorioOrigenMover = null;
+let modoAtacarActivo = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     const parametros = new URLSearchParams(window.location.search);
@@ -25,11 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
 async function cargarYRenderizarMapa(partidaId) {
     try {
         const respuesta = await fetch(`http://localhost:8000/api/partidas/${partidaId}/estado`);
-        
         if (!respuesta.ok) {
             throw new Error(`Error de red: ${respuesta.status}`);
         }
-
         estadoJuego = await respuesta.json();
         console.log("Estado de la partida:", estadoJuego);
         
@@ -49,7 +48,6 @@ function dibujarGrafo(territorios, fronteras) {
         tooltip.style.left = `${event.clientX + 15}px`;
         tooltip.style.top = `${event.clientY + 15}px`;
     });
-
     //Calculo dinamico ViewBox
     let maxCoordX = 0;
     let maxCoordY = 0;
@@ -180,7 +178,6 @@ async function apiReforzarTerritorio(partidaId, territorioId) {
         const mensajeError = data.errors ? data.errors.join("\n- ") : (data.error || "Error desconocido");
         throw new Error(mensajeError);
     }
-    
     return data;
 }
 
@@ -203,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const partidaId = new URLSearchParams(window.location.search).get('id');
                 const nuevoEstado = await apiReforzarTerritorio(partidaId, territorioSeleccionado.id);
                 actualizarPantallaRefuerzo(nuevoEstado);
+                deseleccionarTerritorio()
 
             } catch (error) {
                 console.error("Error al reforzar:", error);
@@ -225,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             panelMover.classList.remove('hidden');
             panelMover.style.display = 'block';
-            
+
             if (panelAcciones) {
                 panelAcciones.style.display = 'none';
             }
@@ -240,6 +238,50 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function onTerritorioClickeado(territorioDestino) {
+    //Modo atacar
+    if (modoAtacarActivo) {
+        modoAtacarActivo = false;
+        const panelAtacar = document.getElementById('panel-atacar');
+        panelAtacar.classList.add('hidden');
+        panelAtacar.style.display = 'none';
+
+        if (territorioOrigenMover.id === territorioDestino.id) {
+            alert("El territorio destino debe ser distinto al de origen.");
+            deseleccionarTerritorio();
+            return;
+        }
+        if (territorioDestino.pais_duenio_id === estadoJuego.partida.turno_actual) {
+            alert("Solo podés atacar territorios enemigos.");
+            deseleccionarTerritorio();
+            return;
+        }
+        const cantidadStr = prompt(`¿Cuántas tropas querés movilizar para atacar ${territorioDestino.nombre || 'destino'}?`);
+        if (cantidadStr === null || cantidadStr.trim() === '') {
+            deseleccionarTerritorio();
+            return;
+        }
+        const cantidad = parseInt(cantidadStr, 10);
+        if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
+            alert("Cantidad inválida. Recordá que debés dejar al menos 1 tropa en el territorio de origen.");
+            deseleccionarTerritorio();
+            return;
+        }
+        try {
+            const partidaId = new URLSearchParams(window.location.search).get('id');
+            const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
+
+            estadoJuego = resultadoAtaque.estado;
+            
+            if (resultadoAtaque.victory && resultadoAtaque.victory.isGameOver) {
+                alert(`¡Partida Finalizada! Ganó el país ID: ${resultadoAtaque.victory.winnerCountryId}`);
+            }
+        } catch (error) {
+            console.error("Error al atacar:", error);
+            alert(`No se pudo atacar: \n- ${error.message}`);
+        }
+        deseleccionarTerritorio();
+        return; 
+    }
     //Modo mover tropas
     if (modoMoverActivo) {
         modoMoverActivo = false;
@@ -260,7 +302,6 @@ async function onTerritorioClickeado(territorioDestino) {
             deseleccionarTerritorio();
             return;
         }
-
         const cantidad = parseInt(cantidadStr, 10);
         if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
             alert("Cantidad inválida. Recordá que debés dejar al menos 1 tropa en el territorio de origen.");
@@ -310,3 +351,49 @@ async function apiMoverTropas(partidaId, origenId, destinoId, cantidad) {
     }
     return data;
 }
+
+async function apiAtacar(partidaId, origenId, destinoId, cantidad) {
+    const respuesta = await fetch(`http://localhost:8000/api/partidas/${partidaId}/atacar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            origen_id: origenId,
+            destino_id: destinoId,
+            tropas_atacantes: cantidad
+        })
+    });
+    const data = await respuesta.json();
+    
+    if (!respuesta.ok) {
+        const mensajeError = data.errors ? data.errors.join("\n- ") : (data.error || "Error desconocido");
+        throw new Error(mensajeError);
+    }
+    return data;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnAtacar = document.getElementById('btn-atacar');
+    const panelAtacar = document.getElementById('panel-atacar');
+    const panelAcciones = document.getElementById('panel-acciones');
+
+    if (btnAtacar) {
+        btnAtacar.addEventListener('click', () => {
+            if (!territorioSeleccionado) return;
+            modoAtacarActivo = true;
+            territorioOrigenMover = territorioSeleccionado;
+            
+            panelAtacar.classList.remove('hidden');
+            panelAtacar.style.display = 'block';
+
+            if (panelAcciones) {
+                panelAcciones.style.display = 'none';
+            }
+        });
+    }
+    document.addEventListener('mousemove', (e) => {
+        if (modoAtacarActivo) {
+            panelAtacar.style.left = (e.pageX + 15) + 'px';
+            panelAtacar.style.top = (e.pageY + 15) + 'px';
+        }
+    });
+});
