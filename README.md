@@ -1,39 +1,12 @@
 # Circle of Conquest
 
-Proyecto de juego de estrategia por turnos basado en conquista territorial como el juego "Risk". La idea es crear una partida en la que varios países/civilizaciones compiten por controlar un mapa dividido en territorios, con despliegues, ataques, movimiento de tropas y turnos automáticos para la IA.
-
-## ¿Qué es este proyecto?
-
-Es una aplicación web full-stack que combina:
-- Frontend estático con HTML, JavaScript y Tailwind CSS
-- Backend en Node.js con Express
-- Base de datos PostgreSQL
-- Lógica de juego para simulación de batallas, turnos y victoria
-
-## Funcionalidades
-
-- Crear una nueva partida desde la interfaz web
-- Generar automáticamente un mapa con territorios conectados
-- Asignar países/territorios a los jugadores
-- Desplegar tropas en territorios propios
-- Mover tropas entre territorios aliados
-- Atacar territorios enemigos
-- Avanzar el turno y permitir que la IA actúe si corresponde
-- Consultar el estado completo de la partida desde el backend
-- Gestionar (CRUD) países, tipos de tropas y tipos de terreno desde la interfaz de administración
-
-## Capturas de Pantalla
-
-### Tablero de Juego (Mapa de la Partida)
-![Mapa de la Partida](./screenshots/Mapas.png)
-
-### Editor de Entidades (CRUD)
-![Editor de Entidades](./screenshots/Editor.png)
+Proyecto de juego de estrategia por turnos basado en conquista territorial como el juego "Risk". La idea es crear una partida en la que varios países/civilizaciones compiten por controlar un mapa dividido en territorios, con despliegues (refuerzos), ataques, movimiento/reubicación de tropas y turnos automáticos para los bots enemigos.
 
 ## Requisitos
 
 - Docker
 - Docker Compose
+- Dependencias varias (detalladas en los package.json)
 
 ## Cómo montarlo
 
@@ -42,6 +15,7 @@ Es una aplicación web full-stack que combina:
 3. Ejecutar:
 
 ```bash
+npm install
 docker compose up --build
 ```
 
@@ -66,7 +40,30 @@ docker compose down -v
 docker compose up --build
 ```
 
-## Notas
+## ¿Qué es este proyecto?
 
-El proyecto está pensado como prototipo de juego estratégico y puede ampliarse con más reglas, UI avanzada y persistencia de partidas. La lógica principal del juego se encuentra en la carpeta `servidor/logic` y la API en `servidor/api`.
+Es una aplicación web full-stack que combina:
+- Frontend estático con HTML, JavaScript y Tailwind CSS
+- Backend en Node.js con Express
+- Base de datos PostgreSQL
+- Lógica de juego para simulación de batallas, turnos y victoria en JavaScript
 
+## Funcionalidades
+
+- Crear una nueva partida desde la interfaz web
+- Generar automáticamente un mapa con territorios conectados
+- Asignar países/territorios a los jugadores
+- Desplegar tropas en territorios propios
+- Mover tropas entre territorios aliados
+- Atacar territorios enemigos
+- Avanzar el turno y permitir que la IA actúe si corresponde
+- Consultar el estado completo de la partida desde el backend
+- Gestionar (CRUD) países, tipos de tropas y tipos de terreno desde la interfaz de administración
+
+## Capturas de Pantalla
+
+### Tablero de Juego (Mapa de la Partida)
+![Mapa de la Partida](./screenshots/Mapas.png)
+
+### Editor de Entidades (CRUD)
+![Editor de Entidades](./screenshots/Editor.png
