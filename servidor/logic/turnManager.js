@@ -2,7 +2,7 @@
  * Módulo de Gestión de Turnos y Ciclo de Vida del Juego
  */
 
-import { resolveCombat } from './gameLogic.js';
+import { resolveCombat, buildTroopList, buildTroopListFromComposition } from './gameLogic.js';
 import { getBotDeployment, getBotAttacks } from './botLogic.js';
 
 /**
@@ -122,6 +122,32 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
     let attacksRemaining = true;
     let attackCounter = 0;
 
+    const totalFromComposition = (comp) => (Array.isArray(comp)
+        ? comp.reduce((sum, item) => sum + ((Number.isInteger(item?.cantidad) && item.cantidad > 0) ? item.cantidad : 0), 0)
+        : 0);
+    const toMap = (comp) => {
+        const map = new Map();
+        for (const item of (comp || [])) {
+            if (!Number.isInteger(item?.id_tipo_tropa)) continue;
+            const cantidad = Number.isInteger(item?.cantidad) ? item.cantidad : 0;
+            if (cantidad <= 0) continue;
+            map.set(item.id_tipo_tropa, (map.get(item.id_tipo_tropa) || 0) + cantidad);
+        }
+        return map;
+    };
+    const fromMap = (map) => Array.from(map.entries())
+        .filter(([, cantidad]) => cantidad > 0)
+        .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
+    const subtractComp = (base, remove) => {
+        const out = toMap(base);
+        for (const [idTipo, cant] of toMap(remove).entries()) {
+            const restante = (out.get(idTipo) || 0) - cant;
+            if (restante > 0) out.set(idTipo, restante);
+            else out.delete(idTipo);
+        }
+        return fromMap(out);
+    };
+
     while (attacksRemaining && attackCounter < maxAttacksAllowed) {
         attackCounter++;
         const currentBotTerritories = tempTerritories.filter(t => t.pais_duenio_id === botId);
@@ -139,12 +165,34 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
 
         if (!origin || !target) continue;
 
-        const defaultTroop = (troopTypesCatalog && troopTypesCatalog.length > 0) 
-            ? troopTypesCatalog[0] 
-            : { dado_min: 1, dado_max: 6 };
-        
-        const attackingTroopsList = Array(attack.tropas_atacantes).fill(defaultTroop);
-        const defendingTroopsList = Array(target.tropas_actuales || 1).fill(defaultTroop);
+        const composicionOrigen = Array.isArray(origin.composicion_tropas) ? origin.composicion_tropas : [];
+        const composicionDestino = Array.isArray(target.composicion_tropas) ? target.composicion_tropas : [];
+        const totalAtaque = Number.isInteger(attack.tropas_atacantes) ? attack.tropas_atacantes : 0;
+
+        let composicionAtaque = [];
+        let restante = totalAtaque;
+        for (const entry of composicionOrigen) {
+            if (restante <= 0) break;
+            const disponibles = Number.isInteger(entry?.cantidad) ? entry.cantidad : 0;
+            const tomar = Math.min(disponibles, restante);
+            if (tomar > 0) composicionAtaque.push({ id_tipo_tropa: entry.id_tipo_tropa, cantidad: tomar });
+            restante -= tomar;
+        }
+        if (restante > 0) {
+            const attackingFallback = buildTroopList(totalAtaque, troopTypesCatalog || []);
+            composicionAtaque = [];
+            for (const u of attackingFallback) {
+                if (!Number.isInteger(u?.id)) continue;
+                const existing = composicionAtaque.find((e) => e.id_tipo_tropa === u.id);
+                if (existing) existing.cantidad += 1;
+                else composicionAtaque.push({ id_tipo_tropa: u.id, cantidad: 1 });
+            }
+        }
+
+        const attackingTroopsList = buildTroopListFromComposition(composicionAtaque, troopTypesCatalog || []);
+        const defendingTroopsList = composicionDestino.length > 0
+            ? buildTroopListFromComposition(composicionDestino, troopTypesCatalog || [])
+            : buildTroopList(target.tropas_actuales || 1, troopTypesCatalog || []);
 
         const attackerObj = { id: botId, resistencia_terreno_id: botCountry.resistencia_terreno_id };
         const defenderObj = target.pais_duenio_id ? { id: target.pais_duenio_id } : null;
@@ -172,10 +220,16 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
 
         if (combatResult.attackerWins) {
             target.pais_duenio_id = botId;
-            target.tropas_actuales = attack.tropas_atacantes;
-            origin.tropas_actuales = 1;
+            target.composicion_tropas = combatResult.attackerSurvivorComposition || [];
+            target.tropas_actuales = totalFromComposition(target.composicion_tropas);
+            origin.composicion_tropas = subtractComp(composicionOrigen, composicionAtaque);
+            origin.tropas_actuales = totalFromComposition(origin.composicion_tropas);
         } else {
-            origin.tropas_actuales = 1;
+            const perdidasAtacante = subtractComp(composicionAtaque, combatResult.attackerSurvivorComposition || []);
+            origin.composicion_tropas = subtractComp(composicionOrigen, perdidasAtacante);
+            origin.tropas_actuales = totalFromComposition(origin.composicion_tropas);
+            target.composicion_tropas = combatResult.defenderSurvivorComposition || [];
+            target.tropas_actuales = totalFromComposition(target.composicion_tropas);
         }
 
         const victory = checkVictoryCondition(tempTerritories, participatingCountries);

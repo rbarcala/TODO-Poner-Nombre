@@ -18,10 +18,42 @@ import { obtenerTiposTropas } from "../bdd/tropas.js";
 
 import { generateMap } from "../logic/mapLogic.js";
 import { validateDeploymentAction, validateMoveAction } from "../logic/actionValidators.js";
-import { calculateEconomyPoints, calculateDeploymentCost, resolveCombat, buildTroopList } from "../logic/gameLogic.js";
+import { calculateEconomyPoints, calculateDeploymentCost, resolveCombat, buildTroopList, buildTroopListFromComposition } from "../logic/gameLogic.js";
 import { getNextActivePlayer, checkVictoryCondition, executeBotTurn } from "../logic/turnManager.js";
 
 export const endpointsPartidas = Router();
+
+function totalFromComposition(composicion) {
+  if (!Array.isArray(composicion)) return 0;
+  return composicion.reduce((sum, item) => sum + ((Number.isInteger(item?.cantidad) && item.cantidad > 0) ? item.cantidad : 0), 0);
+}
+
+function toCompositionMap(composicion) {
+  const map = new Map();
+  for (const item of (composicion || [])) {
+    if (!Number.isInteger(item?.id_tipo_tropa)) continue;
+    const cantidad = Number.isInteger(item?.cantidad) ? item.cantidad : 0;
+    if (cantidad <= 0) continue;
+    map.set(item.id_tipo_tropa, (map.get(item.id_tipo_tropa) || 0) + cantidad);
+  }
+  return map;
+}
+
+function compositionFromMap(map) {
+  return Array.from(map.entries())
+    .filter(([, cantidad]) => cantidad > 0)
+    .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
+}
+
+function subtractCompositions(base, remove) {
+  const result = toCompositionMap(base);
+  for (const [idTipo, cantidad] of toCompositionMap(remove).entries()) {
+    const restante = (result.get(idTipo) || 0) - cantidad;
+    if (restante > 0) result.set(idTipo, restante);
+    else result.delete(idTipo);
+  }
+  return compositionFromMap(result);
+}
 
 // GET /api/partidas - Listar partidas
 endpointsPartidas.get("/", async (req, res) => {
@@ -228,15 +260,62 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   const origen = estado.territorios.find(t => t.id === origen_id);
   const destino = estado.territorios.find(t => t.id === destino_id);
   const activePlayerId = estado.partida.turno_actual;
+  const ataquePorComposicion = Array.isArray(tropas_atacantes);
+  const cantidadAtacante = ataquePorComposicion
+    ? totalFromComposition(tropas_atacantes)
+    : tropas_atacantes;
 
-  const validation = validateMoveAction(activePlayerId, origen, destino, tropas_atacantes, estado.fronteras);
+  const validation = validateMoveAction(activePlayerId, origen, destino, cantidadAtacante, estado.fronteras);
   if (!validation.isValid) {
     return res.status(400).json({ errors: validation.errors });
   }
 
   const catalogTropas = await obtenerTiposTropas();
-  const attackingTroopsList = buildTroopList(tropas_atacantes, catalogTropas || []);
-  const defendingTroopsList = buildTroopList(destino.tropas_actuales || 1, catalogTropas || []);
+  const composicionOrigen = Array.isArray(origen.composicion_tropas) ? origen.composicion_tropas : [];
+  const composicionDestino = Array.isArray(destino.composicion_tropas) ? destino.composicion_tropas : [];
+  const totalOrigen = totalFromComposition(composicionOrigen);
+  const totalDestino = totalFromComposition(composicionDestino);
+  const cantidadAtacanteNormalizada = Number.isInteger(cantidadAtacante) ? cantidadAtacante : 0;
+
+  if (totalOrigen < cantidadAtacanteNormalizada) {
+    return res.status(400).json({ error: "No hay tropas suficientes en el territorio origen para ese ataque." });
+  }
+
+  let composicionAtaque = null;
+  if (ataquePorComposicion) {
+    composicionAtaque = tropas_atacantes
+      .filter((item) => Number.isInteger(item?.id_tipo_tropa) && Number.isInteger(item?.cantidad) && item.cantidad > 0)
+      .map((item) => ({ id_tipo_tropa: item.id_tipo_tropa, cantidad: item.cantidad }));
+    const requestedTotal = totalFromComposition(composicionAtaque);
+    if (requestedTotal !== cantidadAtacanteNormalizada || requestedTotal <= 0) {
+      return res.status(400).json({ error: "La composición atacante es inválida." });
+    }
+    for (const item of composicionAtaque) {
+      const entryOrigen = composicionOrigen.find((c) => c.id_tipo_tropa === item.id_tipo_tropa);
+      const disponible = Number.isInteger(entryOrigen?.cantidad) ? entryOrigen.cantidad : 0;
+      if (disponible < item.cantidad) {
+        return res.status(400).json({ error: `No hay suficientes tropas del tipo ${item.id_tipo_tropa} en el origen.` });
+      }
+    }
+  } else {
+    composicionAtaque = [];
+    let restante = cantidadAtacanteNormalizada;
+    for (const entry of composicionOrigen) {
+      if (restante <= 0) break;
+      const disponibles = Number.isInteger(entry?.cantidad) ? entry.cantidad : 0;
+      const tomar = Math.min(disponibles, restante);
+      if (tomar > 0) composicionAtaque.push({ id_tipo_tropa: entry.id_tipo_tropa, cantidad: tomar });
+      restante -= tomar;
+    }
+    if (restante > 0) {
+      return res.status(400).json({ error: "No se pudo construir la composición atacante con las tropas disponibles." });
+    }
+  }
+
+  const attackingTroopsList = buildTroopListFromComposition(composicionAtaque, catalogTropas || []);
+  const defendingTroopsList = (composicionDestino.length > 0)
+    ? buildTroopListFromComposition(composicionDestino, catalogTropas || [])
+    : buildTroopList(destino.tropas_actuales || 1, catalogTropas || []);
 
   const attackerObj = { id: activePlayerId, resistencia_terreno_id: null };
   const defenderObj = destino.pais_duenio_id ? { id: destino.pais_duenio_id } : null;
@@ -249,10 +328,18 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
   const result = resolveCombat(attackerObj, defenderObj, terrainObj, attackingTroopsList, defendingTroopsList);
 
   if (result.attackerWins) {
-    await actualizarTerritorio(destino.id, activePlayerId, tropas_atacantes, catalogTropas || []);
-    await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes, catalogTropas || []);
+    await actualizarTerritorio(destino.id, activePlayerId, result.attackerSurvivorComposition || [], catalogTropas || []);
+    const composicionOrigenPost = subtractCompositions(composicionOrigen, composicionAtaque);
+    await actualizarTerritorio(origen.id, activePlayerId, composicionOrigenPost, catalogTropas || []);
   } else {
-    await actualizarTerritorio(origen.id, activePlayerId, origen.tropas_actuales - tropas_atacantes, catalogTropas || []);
+    const composicionPerdidasAtacante = subtractCompositions(composicionAtaque, result.attackerSurvivorComposition || []);
+    const composicionOrigenPost = subtractCompositions(composicionOrigen, composicionPerdidasAtacante);
+    await actualizarTerritorio(origen.id, activePlayerId, composicionOrigenPost, catalogTropas || []);
+    const defensorOwner = destino.pais_duenio_id || null;
+    const composicionDefensorPostCombate = (result.defenderSurvivorComposition && result.defenderSurvivorComposition.length > 0)
+      ? result.defenderSurvivorComposition
+      : [];
+    await actualizarTerritorio(destino.id, defensorOwner, composicionDefensorPostCombate, catalogTropas || []);
   }
 
   await incrementarMovimientosPartida(partidaId);

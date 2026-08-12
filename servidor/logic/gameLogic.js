@@ -92,7 +92,56 @@ export function buildTroopList(count, troopTypesCatalog = []) {
         return Array(normalizedCount).fill({ dado_min: 1, dado_max: 6 });
     }
 
-    return Array.from({ length: normalizedCount }, (_, index) => normalizedCatalog[index % normalizedCatalog.length]);
+    return Array.from({ length: normalizedCount }, (_, index) => ({ ...normalizedCatalog[index % normalizedCatalog.length] }));
+}
+
+export function buildTroopListFromComposition(composicion, troopTypesCatalog = []) {
+    if (!Array.isArray(composicion) || composicion.length === 0) return [];
+
+    const catalogMap = new Map((troopTypesCatalog || []).map((t) => [t.id, t]));
+    const list = [];
+
+    for (const item of composicion) {
+        const cantidad = Number.isInteger(item?.cantidad) && item.cantidad > 0 ? item.cantidad : 0;
+        if (cantidad <= 0) continue;
+
+        const catalogEntry = catalogMap.get(item.id_tipo_tropa) || {};
+        const unit = {
+            id_tipo_tropa: item.id_tipo_tropa,
+            tipo: item.tipo || catalogEntry.tipo,
+            dado_min: Number.isInteger(item.dado_min) ? item.dado_min : (Number.isInteger(catalogEntry.dado_min) ? catalogEntry.dado_min : 1),
+            dado_max: Number.isInteger(item.dado_max) ? item.dado_max : (Number.isInteger(catalogEntry.dado_max) ? catalogEntry.dado_max : 6),
+            costo: Number.isInteger(item.costo) ? item.costo : (Number.isInteger(catalogEntry.costo) ? catalogEntry.costo : 1)
+        };
+
+        for (let i = 0; i < cantidad; i++) {
+            list.push({ ...unit });
+        }
+    }
+
+    return list;
+}
+
+export function summarizeTroopsByType(troopList = []) {
+    const summary = new Map();
+    for (const unit of troopList) {
+        const typeId = unit?.id_tipo_tropa;
+        if (!Number.isInteger(typeId)) continue;
+        const current = summary.get(typeId);
+        if (current) {
+            current.cantidad += 1;
+        } else {
+            summary.set(typeId, {
+                id_tipo_tropa: typeId,
+                tipo: unit.tipo,
+                dado_min: unit.dado_min,
+                dado_max: unit.dado_max,
+                costo: unit.costo,
+                cantidad: 1
+            });
+        }
+    }
+    return Array.from(summary.values());
 }
 
 /**
@@ -116,6 +165,7 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
     
     // Si el territorio no está ocupado (no hay defensor o tropas defensoras)
     if (!defendingTroops || defendingTroops.length === 0) {
+        const attackerSurvivors = attackingTroops.map((t) => ({ ...t }));
         return {
             totalAttack: attackingTroops.length,
             totalDefense: 0,
@@ -128,18 +178,17 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
             modDefenseUsed: 1.0,
             attackerHasResistance: false,
             defenderHasResistance: false,
-            autoConquest: true
+            autoConquest: true,
+            attackerCasualties: 0,
+            defenderCasualties: 0,
+            attackerSurvivors,
+            defenderSurvivors: [],
+            attackerSurvivorComposition: summarizeTroopsByType(attackerSurvivors),
+            defenderSurvivorComposition: []
         };
     }
 
-    // 1. Tiradas bases
-    const attackRolls = attackingTroops.map(t => rollDie(t.dado_min, t.dado_max));
-    const defenseRolls = defendingTroops.map(t => rollDie(t.dado_min, t.dado_max));
-
-    const totalAttackBase = attackRolls.reduce((sum, val) => sum + val, 0);
-    const totalDefenseBase = defenseRolls.reduce((sum, val) => sum + val, 0);
-
-    // 2. Modificadores de terreno
+    // 1. Modificadores de terreno
     let modAttack = terrain && typeof terrain.modificador_ataque === 'number' 
         ? terrain.modificador_ataque 
         : (terrain && terrain.modificador_ataque ? parseFloat(terrain.modificador_ataque) : 1.0);
@@ -148,7 +197,7 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
         ? terrain.modificador_defensa 
         : (terrain && terrain.modificador_defensa ? parseFloat(terrain.modificador_defensa) : 1.0);
 
-    // 3. Chequear resistencias de civilización (si resiste el terreno, ignora penalizaciones < 1.0)
+    // 2. Chequear resistencias de civilización (si resiste el terreno, ignora penalizaciones < 1.0)
     let attackerHasResistance = false;
     let defenderHasResistance = false;
 
@@ -166,12 +215,68 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
         }
     }
 
-    // 4. Calcular puntajes finales
-    const totalAttack = Math.round(totalAttackBase * modAttack);
-    const totalDefense = Math.round(totalDefenseBase * modDefense);
+    const attackPool = attackingTroops.map((t) => ({ ...t }));
+    const defensePool = defendingTroops.map((t) => ({ ...t }));
+    const attackRolls = [];
+    const defenseRolls = [];
+    let totalAttackBase = 0;
+    let totalDefenseBase = 0;
+    let totalAttack = 0;
+    let totalDefense = 0;
 
-    // El atacante gana si supera la defensa
-    const attackerWins = totalAttack > totalDefense;
+    const unitPower = (unit) => {
+        const min = Number.isFinite(unit?.dado_min) ? Number(unit.dado_min) : 1;
+        const max = Number.isFinite(unit?.dado_max) ? Number(unit.dado_max) : 6;
+        return (min + max) / 2;
+    };
+
+    while (attackPool.length > 0 && defensePool.length > 0) {
+        const roundAttackers = [...attackPool]
+            .sort((a, b) => unitPower(b) - unitPower(a))
+            .slice(0, Math.min(3, attackPool.length));
+        const roundDefenders = [...defensePool]
+            .sort((a, b) => unitPower(b) - unitPower(a))
+            .slice(0, Math.min(2, defensePool.length));
+
+        const rolledAttackers = roundAttackers
+            .map((unit) => {
+                const rawRoll = rollDie(unit.dado_min, unit.dado_max);
+                const adjustedRoll = Math.round(rawRoll * modAttack);
+                attackRolls.push(rawRoll);
+                totalAttackBase += rawRoll;
+                totalAttack += adjustedRoll;
+                return { unit, adjustedRoll };
+            })
+            .sort((a, b) => b.adjustedRoll - a.adjustedRoll);
+
+        const rolledDefenders = roundDefenders
+            .map((unit) => {
+                const rawRoll = rollDie(unit.dado_min, unit.dado_max);
+                const adjustedRoll = Math.round(rawRoll * modDefense);
+                defenseRolls.push(rawRoll);
+                totalDefenseBase += rawRoll;
+                totalDefense += adjustedRoll;
+                return { unit, adjustedRoll };
+            })
+            .sort((a, b) => b.adjustedRoll - a.adjustedRoll);
+
+        const confrontations = Math.min(rolledAttackers.length, rolledDefenders.length);
+        for (let i = 0; i < confrontations; i++) {
+            const a = rolledAttackers[i];
+            const d = rolledDefenders[i];
+            if (a.adjustedRoll > d.adjustedRoll) {
+                const deadIndex = defensePool.indexOf(d.unit);
+                if (deadIndex >= 0) defensePool.splice(deadIndex, 1);
+            } else {
+                const deadIndex = attackPool.indexOf(a.unit);
+                if (deadIndex >= 0) attackPool.splice(deadIndex, 1);
+            }
+        }
+    }
+
+    const attackerWins = defensePool.length === 0;
+    const attackerCasualties = attackingTroops.length - attackPool.length;
+    const defenderCasualties = defendingTroops.length - defensePool.length;
 
     return {
         totalAttack,
@@ -184,6 +289,12 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
         modAttackUsed: modAttack,
         modDefenseUsed: modDefense,
         attackerHasResistance,
-        defenderHasResistance
+        defenderHasResistance,
+        attackerCasualties,
+        defenderCasualties,
+        attackerSurvivors: attackPool,
+        defenderSurvivors: defensePool,
+        attackerSurvivorComposition: summarizeTroopsByType(attackPool),
+        defenderSurvivorComposition: summarizeTroopsByType(defensePool)
     };
 }
