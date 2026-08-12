@@ -93,12 +93,23 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
         return turnLog;
     }
 
-    const deployments = getBotDeployment(botCountry, botTerritories, tempTerritories, fronteras);
+    const deployments = getBotDeployment(botCountry, botTerritories, tempTerritories, fronteras, troopTypesCatalog);
     if (deployments && deployments.length > 0) {
         turnLog.deployments = deployments;
         for (const dep of deployments) {
             const t = tempTerritories.find(x => x.id === dep.territorio_id);
             if (t) {
+                // Actualizar composicion_tropas en memoria si existe, además del conteo total
+                const composicionActual = Array.isArray(t.composicion_tropas) ? t.composicion_tropas : [];
+                if (dep.id_tipo_tropa) {
+                    const entrada = composicionActual.find(e => e.id_tipo_tropa === dep.id_tipo_tropa);
+                    if (entrada) {
+                        entrada.cantidad += dep.cantidad;
+                    } else {
+                        composicionActual.push({ id_tipo_tropa: dep.id_tipo_tropa, cantidad: dep.cantidad });
+                    }
+                    t.composicion_tropas = composicionActual;
+                }
                 t.tropas_actuales = (t.tropas_actuales || 0) + dep.cantidad;
             }
         }

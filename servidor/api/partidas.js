@@ -9,7 +9,8 @@ import {
   borrarPartida,
   limpiarDatosDePartidas,
   incrementarMovimientosPartida,
-  resetearMovimientosPartida
+  resetearMovimientosPartida,
+  marcarFortificacionRealizada
 } from "../bdd/partidas.js";
 import { obtenerPaises } from "../bdd/paises.js";
 import { obtenerTerrenos } from "../bdd/terrenos.js";
@@ -17,7 +18,7 @@ import { obtenerTiposTropas } from "../bdd/tropas.js";
 
 import { generateMap } from "../logic/mapLogic.js";
 import { validateDeploymentAction, validateMoveAction } from "../logic/actionValidators.js";
-import { calculateReinforcements, resolveCombat, buildTroopList } from "../logic/gameLogic.js";
+import { calculateEconomyPoints, calculateDeploymentCost, resolveCombat, buildTroopList } from "../logic/gameLogic.js";
 import { getNextActivePlayer, checkVictoryCondition, executeBotTurn } from "../logic/turnManager.js";
 
 export const endpointsPartidas = Router();
@@ -91,44 +92,89 @@ endpointsPartidas.post("/", async (req, res) => {
 });
 
 // POST /api/partidas/:id/desplegar - Reforzar tropas en territorio propio
+// Body esperado: { territorio_id: number, composicion: [{ id_tipo_tropa: number, cantidad: number }] }
 endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   const partidaId = parseInt(req.params.id);
-  //const { territorio_id, cantidad } = req.body;
-  const { territorio_id } = req.body;
+  const { territorio_id, composicion } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
+  if (!estado) return res.status(404).json({ error: "Partida no encontrada." });
+
   const movimientosActuales = estado.partida.movimientos_realizados || 0;
   if (movimientosActuales >= 2) {
     return res.status(400).json({ error: "Has alcanzado el límite máximo de 2 acciones por turno. Debes pasar el turno." });
   }
 
-  const activePlayerId = estado.partida.turno_actual;
+  if (estado.partida.ha_fortificado) {
+    return res.status(400).json({ error: "Ya realizaste la acción de fortificar en este turno. Solo se permite una vez por turno." });
+  }
 
-  const territoriesCount = estado.territorios.filter(t => t.pais_duenio_id === activePlayerId).length;
-  const paisActivo = estado.paises.find(p => p.id === activePlayerId);
-  const economia = paisActivo ? paisActivo.economia : 0;
-  const cantidad = calculateReinforcements(territoriesCount, economia);
+  const activePlayerId = estado.partida.turno_actual;
+  const paisActivo = estado.paises.find(p => (p.pais_id || p.id) === activePlayerId);
+  if (!paisActivo) return res.status(400).json({ error: "No se encontró el país activo." });
+
+  const economia = paisActivo.economia || 1;
+  const presupuesto = calculateEconomyPoints(economia);
+
+  const catalogTropas = await obtenerTiposTropas();
+
+  // Validar y normalizar composicion recibida
+  if (!Array.isArray(composicion) || composicion.length === 0) {
+    return res.status(400).json({ error: "Debes especificar al menos un tipo de tropa para desplegar.", presupuesto_disponible: presupuesto });
+  }
+  const composicionNormalizada = composicion
+    .filter(item => Number.isInteger(item?.id_tipo_tropa) && item.id_tipo_tropa > 0
+                 && Number.isInteger(item?.cantidad) && item.cantidad > 0);
+  if (composicionNormalizada.length === 0) {
+    return res.status(400).json({ error: "La composición de tropas contiene valores inválidos.", presupuesto_disponible: presupuesto });
+  }
+
+  // Verificar que todos los tipos existen en el catálogo
+  const tiposInvalidos = composicionNormalizada.filter(item =>
+    !(catalogTropas || []).some(t => t.id === item.id_tipo_tropa)
+  );
+  if (tiposInvalidos.length > 0) {
+    return res.status(400).json({ error: `Tipos de tropa no existentes: ${tiposInvalidos.map(t => t.id_tipo_tropa).join(', ')}.` });
+  }
+
+  // Calcular costo total y validar contra presupuesto
+  const costoTotal = calculateDeploymentCost(composicionNormalizada, catalogTropas || []);
+  if (costoTotal > presupuesto) {
+    return res.status(400).json({
+      error: `El costo total de las tropas (${costoTotal}) supera tu presupuesto disponible (${presupuesto}) para este turno.`,
+      presupuesto_disponible: presupuesto,
+      costo_solicitado: costoTotal
+    });
+  }
 
   const territorioTarget = estado.territorios.find(t => t.id === territorio_id);
   if (!territorioTarget) return res.status(400).json({ error: "Territorio no encontrado." });
-
-  const validation = validateDeploymentAction(
-    activePlayerId,
-    estado.territorios,
-    [{ territorio_id, cantidad }],
-    999
-  );
-  if (!validation.isValid) {
-    return res.status(400).json({ errors: validation.errors });
+  if (territorioTarget.pais_duenio_id !== activePlayerId) {
+    return res.status(400).json({ error: "No puedes desplegar tropas en un territorio que no te pertenece." });
   }
-  const tiposTropa = await obtenerTiposTropas();
-  const nuevasTropas = (territorioTarget.tropas_actuales || 1) + cantidad;
-  await actualizarTerritorio(territorio_id, territorioTarget.pais_duenio_id, nuevasTropas, tiposTropa || []);
 
+  // Combinar composición existente del territorio con las nuevas tropas
+  const composicionExistente = Array.isArray(territorioTarget.composicion_tropas) ? territorioTarget.composicion_tropas : [];
+  const composicionFinal = [...composicionExistente];
+  for (const nuevas of composicionNormalizada) {
+    const existente = composicionFinal.find(e => e.id_tipo_tropa === nuevas.id_tipo_tropa);
+    if (existente) {
+      existente.cantidad += nuevas.cantidad;
+    } else {
+      composicionFinal.push({ id_tipo_tropa: nuevas.id_tipo_tropa, cantidad: nuevas.cantidad });
+    }
+  }
+
+  await actualizarTerritorio(territorio_id, activePlayerId, composicionFinal, catalogTropas || []);
+  await marcarFortificacionRealizada(partidaId);
   await incrementarMovimientosPartida(partidaId);
 
   const estadoActualizado = await obtenerEstadoCompletoPartida(partidaId);
-  res.json(estadoActualizado);
+  res.json({
+    ...estadoActualizado,
+    presupuesto_gastado: costoTotal,
+    presupuesto_disponible: presupuesto
+  });
 });
 
 // POST /api/partidas/:id/mover - Mover tropas entre territorios propios
@@ -258,7 +304,11 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
 
     if (botLog.updatedTerritories) {
       for (const t of botLog.updatedTerritories) {
-        await actualizarTerritorio(t.id, t.pais_duenio_id, t.tropas_actuales, catalogTropas || []);
+        // Usar composicion_tropas si está disponible (Feature 1+2), si no caer en tropas_actuales
+        const tropasAGuardar = Array.isArray(t.composicion_tropas) && t.composicion_tropas.length > 0
+          ? t.composicion_tropas
+          : t.tropas_actuales;
+        await actualizarTerritorio(t.id, t.pais_duenio_id, tropasAGuardar, catalogTropas || []);
       }
     }
 

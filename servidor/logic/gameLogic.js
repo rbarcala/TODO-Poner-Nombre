@@ -23,15 +23,50 @@ export function areAdjacent(t1, t2, fronteras) {
 }
 
 /**
+ * Convierte el nivel de economía (1-10) en puntos de presupuesto para la fase de fortificación.
+ * Escala definida: 1→1, 2-3→2, 4-5→3, 6-7→4, 8-9→5, 10→6
+ *
+ * @param {number} economia - Nivel de economía del país (1 a 10)
+ * @returns {number} Puntos de presupuesto disponibles para comprar tropas
+ */
+export function calculateEconomyPoints(economia) {
+    const nivel = Math.max(1, Math.min(10, Math.floor(economia) || 1));
+    if (nivel === 1)  return 1;
+    if (nivel <= 3)   return 2;
+    if (nivel <= 5)   return 3;
+    if (nivel <= 7)   return 4;
+    if (nivel <= 9)   return 5;
+    return 6; // nivel 10
+}
+
+/**
+ * Calcula el costo total de una composición de tropas a desplegar.
+ *
+ * @param {Array<{id_tipo_tropa: number, cantidad: number}>} composicion - Tropas a desplegar
+ * @param {Array<{id: number, costo: number}>} catalogTropas - Catálogo de tipos de tropa con costos
+ * @returns {number} Costo total en puntos de economía
+ */
+export function calculateDeploymentCost(composicion, catalogTropas = []) {
+    if (!Array.isArray(composicion) || composicion.length === 0) return 0;
+    return composicion.reduce((total, item) => {
+        const tipo = (catalogTropas || []).find(t => t.id === item.id_tipo_tropa);
+        const costo = (tipo && Number.isInteger(tipo.costo) && tipo.costo > 0) ? tipo.costo : 1;
+        const cantidad = (Number.isInteger(item.cantidad) && item.cantidad > 0) ? item.cantidad : 0;
+        return total + costo * cantidad;
+    }, 0);
+}
+
+/**
  * Calcula la cantidad de tropas de refuerzo para una civilización en su turno.
- * 
+ * Conservado para compatibilidad con el bot. Para el jugador humano se usa calculateEconomyPoints.
+ *
  * @param {number} territoriesCount - Cantidad de territorios que posee
  * @param {number} economia - Nivel de economía de la civilización (1 a 10)
  * @returns {number} Cantidad de tropas generadas
  */
 export function calculateReinforcements(territoriesCount, economia) {
     const base = Math.max(3, Math.floor(territoriesCount / 3));
-    const bonoEconomia = economia || 0;
+    const bonoEconomia = calculateEconomyPoints(economia);
     return base + bonoEconomia;
 }
 

@@ -1,6 +1,8 @@
 import { 
     areAdjacent, 
-    calculateReinforcements, 
+    calculateReinforcements,
+    calculateEconomyPoints,
+    calculateDeploymentCost,
     resolveCombat 
 } from './logic/gameLogic.js';
 
@@ -52,10 +54,22 @@ console.log(`- tA y tB conectados (esperado: true): ${areAdjacent(tA, tB, fronte
 console.log(`- tA y tC conectados (esperado: true): ${areAdjacent(tA, tC, fronterasMock)}`);
 console.log(`- tA y tD conectados (esperado: false): ${areAdjacent(tA, tD, fronterasMock)}`);
 
-// 3. Probando Refuerzos
-console.log("\n2. Probando Cálculo de Refuerzos:");
-console.log(`- 2 territorios, econ 2 (esperado: 3 + 2 = 5): ${calculateReinforcements(2, 2)}`);
-console.log(`- 9 territorios, econ 4 (esperado: 3 + 4 = 7): ${calculateReinforcements(9, 4)}`);
+// 3. Probando Economía y Presupuesto
+console.log("\n2. Probando Escala de Economía y Costos:");
+const escalaEsperada = [[1,1],[2,2],[3,2],[4,3],[5,3],[6,4],[7,4],[8,5],[9,5],[10,6]];
+escalaEsperada.forEach(([nivel, esperado]) => {
+    const resultado = calculateEconomyPoints(nivel);
+    console.log(`- Economía ${nivel} → ${resultado} pts (esperado ${esperado}): ${resultado === esperado ? 'OK' : 'FALLO'}`);
+});
+
+const catalogMock = [{ id: 1, costo: 1 }, { id: 2, costo: 2 }, { id: 3, costo: 3 }];
+const costoComposicion = calculateDeploymentCost([{ id_tipo_tropa: 1, cantidad: 2 }, { id_tipo_tropa: 2, cantidad: 1 }], catalogMock);
+console.log(`- Costo [2x tipo1(1) + 1x tipo2(2)] = 4 (esperado 4): ${costoComposicion === 4 ? 'OK' : `FALLO (${costoComposicion})`}`);
+
+// 3b. Probando Refuerzos del bot
+console.log("\n2b. Probando Cálculo de Refuerzos (bot):");
+console.log(`- 2 territorios, econ 2 (esperado: base 3 + pts_econ 2 = 5): ${calculateReinforcements(2, 2)}`);
+console.log(`- 9 territorios, econ 4 (esperado: base 3 + pts_econ 3 = 6): ${calculateReinforcements(9, 4)}`);
 
 // 4. Probando Combate
 console.log("\n3. Probando Resolución de Combate:");
@@ -258,7 +272,7 @@ const participatingCountriesList = [
     { pais_id: 999, eliminado: false }
 ];
 const catalogDeTropas = [
-    { id: 1, tipo: "Unidad Común", dado_min: 1, dado_max: 6 }
+    { id: 1, tipo: "Unidad Común", dado_min: 1, dado_max: 6, costo: 1 }
 ];
 
 const botTurnResult = executeBotTurn(botCountryData, territoriesInGame, fronterasMock, participatingCountriesList, catalogDeTropas);

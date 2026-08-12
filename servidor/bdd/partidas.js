@@ -313,16 +313,33 @@ export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasAct
     }
 };
 
-export const asegurarColumnaMovimientos = async () => {
+export const asegurarColumnasPartida = async () => {
     try {
         await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS movimientos_realizados INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS ha_fortificado BOOLEAN DEFAULT FALSE;');
     } catch (e) {
-        // Ignorar si ya existe
+        // Ignorar si ya existen
+    }
+};
+
+// Alias para compatibilidad con llamadas existentes
+export const asegurarColumnaMovimientos = asegurarColumnasPartida;
+
+export const marcarFortificacionRealizada = async (partidaId) => {
+    await asegurarColumnasPartida();
+    try {
+        const res = await pool.query(
+            'UPDATE partidas SET ha_fortificado = TRUE WHERE id = $1 RETURNING *',
+            [partidaId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
     }
 };
 
 export const incrementarMovimientosPartida = async (partidaId) => {
-    await asegurarColumnaMovimientos();
+    await asegurarColumnasPartida();
     try {
         const res = await pool.query(
             'UPDATE partidas SET movimientos_realizados = COALESCE(movimientos_realizados, 0) + 1 WHERE id = $1 RETURNING *',
@@ -335,10 +352,10 @@ export const incrementarMovimientosPartida = async (partidaId) => {
 };
 
 export const resetearMovimientosPartida = async (partidaId) => {
-    await asegurarColumnaMovimientos();
+    await asegurarColumnasPartida();
     try {
         const res = await pool.query(
-            'UPDATE partidas SET movimientos_realizados = 0 WHERE id = $1 RETURNING *',
+            'UPDATE partidas SET movimientos_realizados = 0, ha_fortificado = FALSE WHERE id = $1 RETURNING *',
             [partidaId]
         );
         return res.rows[0];
@@ -348,14 +365,15 @@ export const resetearMovimientosPartida = async (partidaId) => {
 };
 
 export const actualizarEstadoPartida = async (partidaId, turnoActualPaisId, estado, paisGanadorId = null) => {
-    await asegurarColumnaMovimientos();
+    await asegurarColumnasPartida();
     try {
         const query = `
             UPDATE partidas 
             SET turno_actual = COALESCE($1, turno_actual), 
                 estado = COALESCE($2, estado), 
                 pais_ganador_id = COALESCE($3, pais_ganador_id),
-                movimientos_realizados = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN 0 ELSE movimientos_realizados END
+                movimientos_realizados = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN 0 ELSE movimientos_realizados END,
+                ha_fortificado = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN FALSE ELSE ha_fortificado END
             WHERE id = $4 
             RETURNING *
         `;

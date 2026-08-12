@@ -2,23 +2,35 @@
  * Módulo de Inteligencia Artificial y Toma de Decisiones del Bot/NPC
  */
 
-import { areAdjacent, calculateReinforcements } from './gameLogic.js';
+import { areAdjacent, calculateReinforcements, calculateEconomyPoints } from './gameLogic.js';
 
 /**
  * Determina dónde debe desplegar el Bot sus tropas de refuerzo.
- * 
+ * Compra tropas por costo usando el presupuesto de economía.
+ * Selecciona el tipo más barato disponible para maximizar cantidad.
+ *
  * @param {Object} botCountry - Facción del bot { id, pais_id, economia, agresividad }
  * @param {Array<Object>} botTerritories - Territorios propiedad del bot
  * @param {Array<Object>} allTerritories - Todos los territorios en la partida
  * @param {Array<Object>} fronteras - Listado de aristas del grafo (fronteras)
- * @returns {Array<Object>} Despliegues decididos [ { territorio_id, cantidad } ]
+ * @param {Array<Object>} troopTypesCatalog - Catálogo de tipos de tropa [{ id, costo, ... }]
+ * @returns {Array<Object>} Despliegues decididos [ { territorio_id, cantidad, id_tipo_tropa } ]
  */
-export function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras) {
+export function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras, troopTypesCatalog = []) {
     const botId = botCountry.pais_id !== undefined ? botCountry.pais_id : botCountry.id;
-    const reinforcements = calculateReinforcements(botTerritories.length, botCountry.economia);
+
+    // Calcular presupuesto y tipo de tropa más barato disponible
+    const presupuesto = calculateEconomyPoints(botCountry.economia || 1);
+    const catalogoOrdenado = (troopTypesCatalog || [])
+        .filter(t => Number.isInteger(t?.id) && t.id > 0 && Number.isInteger(t?.costo) && t.costo > 0)
+        .sort((a, b) => a.costo - b.costo);
+    const tipoElegido = catalogoOrdenado[0] || { id: null, costo: 1 };
+    const costoUnitario = tipoElegido.costo;
+    const reinforcements = Math.floor(presupuesto / costoUnitario);
+
     const deployments = [];
 
-    if (botTerritories.length === 0) return deployments;
+    if (botTerritories.length === 0 || reinforcements <= 0) return deployments;
 
     // 1. Identificar territorios en la frontera con enemigos/neutrales
     const borderTerritories = [];
@@ -32,9 +44,15 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
         }
     }
 
+    const buildEntry = (territorio_id, cantidad) => ({
+        territorio_id,
+        cantidad,
+        id_tipo_tropa: tipoElegido.id
+    });
+
     // Si no hay fronteras (caso raro o juego ganado), desplegar todo en el primer territorio
     if (borderTerritories.length === 0) {
-        deployments.push({ territorio_id: botTerritories[0].id, cantidad: reinforcements });
+        deployments.push(buildEntry(botTerritories[0].id, reinforcements));
         return deployments;
     }
 
@@ -42,7 +60,6 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
 
     if (aggressiveness >= 7) {
         // --- BOT AGRESIVO ---
-        // Concentra el 80% en el territorio que colinda con el vecino enemigo más débil (para preparar ataque)
         let primaryTarget = borderTerritories[0];
         let minEnemyTroops = Infinity;
 
@@ -64,11 +81,10 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
         const secondaryQty = reinforcements - primaryQty;
 
         if (primaryQty > 0) {
-            deployments.push({ territorio_id: primaryTarget.id, cantidad: primaryQty });
+            deployments.push(buildEntry(primaryTarget.id, primaryQty));
         }
 
         if (secondaryQty > 0) {
-            // Distribuir el resto entre los otros territorios de frontera
             const otherBorders = borderTerritories.filter(t => t.id !== primaryTarget.id);
             if (otherBorders.length > 0) {
                 const qtyPerBorder = Math.floor(secondaryQty / otherBorders.length);
@@ -77,22 +93,20 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
                 for (const t of otherBorders) {
                     const qty = qtyPerBorder + (remainder > 0 ? 1 : 0);
                     if (qty > 0) {
-                        deployments.push({ territorio_id: t.id, cantidad: qty });
+                        deployments.push(buildEntry(t.id, qty));
                     }
                     if (remainder > 0) remainder--;
                 }
             } else {
-                // Si solo hay una frontera, poner todo ahí
                 if (deployments.length > 0) {
                     deployments[0].cantidad += secondaryQty;
                 } else {
-                    deployments.push({ territorio_id: primaryTarget.id, cantidad: secondaryQty });
+                    deployments.push(buildEntry(primaryTarget.id, secondaryQty));
                 }
             }
         }
     } else {
         // --- BOT DEFENSIVO / EQUILIBRADO ---
-        // Distribuye proporcionalmente al tamaño de los ejércitos enemigos adyacentes (amenaza)
         const threats = borderTerritories.map(t => {
             const neighbors = allTerritories.filter(other => 
                 other.pais_duenio_id !== botId && 
@@ -108,13 +122,12 @@ export function getBotDeployment(botCountry, botTerritories, allTerritories, fro
         threats.forEach((th, index) => {
             let qty = Math.floor((th.threat / totalThreat) * reinforcements);
             
-            // Ajustar residuo en el último elemento
             if (index === threats.length - 1) {
                 qty = reinforcements - deployedSum;
             }
             
             if (qty > 0) {
-                deployments.push({ territorio_id: th.territorio_id, cantidad: qty });
+                deployments.push(buildEntry(th.territorio_id, qty));
                 deployedSum += qty;
             }
         });
