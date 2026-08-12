@@ -5,6 +5,31 @@ const normalizarEnteroPositivo = (valor) => {
     return Number.isInteger(numero) && numero > 0 ? numero : 0;
 };
 
+const obtenerTipoInfanteriaId = async (client, troopTypesCatalog = []) => {
+    const desdeCatalogo = (troopTypesCatalog || []).find((tipo) => (
+        Number.isInteger(tipo?.id)
+        && tipo.id > 0
+        && typeof tipo?.tipo === 'string'
+        && tipo.tipo.trim().toLowerCase() === 'infanteria'
+    ));
+
+    if (desdeCatalogo) return desdeCatalogo.id;
+
+    const resultado = await client.query(`
+        SELECT id
+        FROM tipos_de_tropas
+        WHERE LOWER(TRIM(tipo)) = 'infanteria'
+        LIMIT 1
+    `);
+
+    const idInfanteria = resultado.rows[0]?.id;
+    if (!idInfanteria) {
+        throw new Error('No existe el tipo de tropa "Infanteria" en el catálogo. No se puede inicializar la partida.');
+    }
+
+    return idInfanteria;
+};
+
 const obtenerTipoBaseId = async (client, troopTypesCatalog = []) => {
     const primerTipoCatalogo = (troopTypesCatalog || []).find((tipo) => Number.isInteger(tipo?.id) && tipo.id > 0);
     if (primerTipoCatalogo) return primerTipoCatalogo.id;
@@ -113,6 +138,7 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        const idTipoInfanteria = await obtenerTipoInfanteriaId(client, troopTypesCatalog);
 
         const primerPaisId = paisesParticipantesIds[0];
         
@@ -142,7 +168,13 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
                 [partida.id, t.nombre || `Sector (${t.x},${t.y})`, t.x, t.y, t.tipo_terreno_id, t.pais_duenio_id]
             );
             const territorioGuardado = resTerritorio.rows[0];
-            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales ?? 3, troopTypesCatalog);
+            const cantidadInicialInfanteria = t.pais_duenio_id ? 3 : 1;
+            await guardarTropasEstacionadas(
+                client,
+                territorioGuardado.id,
+                [{ id_tipo_tropa: idTipoInfanteria, cantidad: cantidadInicialInfanteria }],
+                troopTypesCatalog
+            );
             idMap.set(t.id, territorioGuardado.id);
         }
 
