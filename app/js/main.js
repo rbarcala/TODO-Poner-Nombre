@@ -27,11 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnNuevaPartida = document.querySelector('button[data-action="play"]');
     const btnAdministrar = document.querySelector('button[data-action="admin"]');
     const modal = document.getElementById('game-modal');
+    const modalDescription = document.getElementById('game-modal-description');
     const countrySelector = document.getElementById('country-selector');
     const startGameBtn = document.getElementById('start-game-btn');
     const cancelGameBtn = document.getElementById('cancel-game-btn');
 
     let availableCountries = [];
+    let selectedPlayerCountryId = null;
+    let modalStep = 'player';
 
     const resetModal = () => {
         if (modal) {
@@ -43,10 +46,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (startGameBtn) {
             startGameBtn.disabled = false;
+            startGameBtn.textContent = 'Comenzar';
         }
         if (btnNuevaPartida) {
             btnNuevaPartida.textContent = 'Jugar';
         }
+        selectedPlayerCountryId = null;
+        modalStep = 'player';
+    };
+
+    const renderPlayerSelector = () => {
+        if (!countrySelector || !startGameBtn) return;
+        if (modalDescription) {
+            modalDescription.textContent = 'Elegí el país que vas a jugar.';
+        }
+        startGameBtn.textContent = 'Siguiente';
+        countrySelector.innerHTML = availableCountries.map((country) => `
+            <label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200">
+                <input type="radio" name="player-country" class="player-country-radio h-4 w-4 border-slate-700 bg-slate-800" value="${country.id}">
+                <span>${country.nombre}</span>
+            </label>
+        `).join('');
+    };
+
+    const renderBotSelector = () => {
+        if (!countrySelector || !startGameBtn) return;
+        if (modalDescription) {
+            modalDescription.textContent = 'Ahora elegí los bots contra los que querés jugar (1 a 3).';
+        }
+        startGameBtn.textContent = 'Comenzar';
+        const botOptions = availableCountries.filter((country) => country.id !== selectedPlayerCountryId);
+        countrySelector.innerHTML = botOptions.map((country) => `
+            <label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200">
+                <input type="checkbox" class="bot-country-checkbox h-4 w-4 rounded border-slate-700 bg-slate-800" value="${country.id}">
+                <span>${country.nombre}</span>
+            </label>
+        `).join('');
     };
 
     const openModal = async () => {
@@ -60,13 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 countrySelector.innerHTML = '<p class="text-sm text-slate-400">Todavía no hay países creados.</p>';
                 return;
             }
-
-            countrySelector.innerHTML = availableCountries.map((country) => `
-                <label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200">
-                    <input type="checkbox" class="country-checkbox h-4 w-4 rounded border-slate-700 bg-slate-800" value="${country.id}">
-                    <span>${country.nombre}</span>
-                </label>
-            `).join('');
+            selectedPlayerCountryId = null;
+            modalStep = 'player';
+            renderPlayerSelector();
         } catch (error) {
             console.error(error);
             countrySelector.innerHTML = '<p class="text-sm text-red-400">No se pudieron cargar los países.</p>';
@@ -91,18 +122,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (startGameBtn) {
         startGameBtn.addEventListener('click', async () => {
-            const selectedCountries = Array.from(document.querySelectorAll('.country-checkbox:checked'))
-                .map((checkbox) => Number(checkbox.value));
-
-            if (selectedCountries.length < 2) {
-                alert('Debés seleccionar al menos 2 países para que peleen entre sí.');
+            if (modalStep === 'player') {
+                const selectedPlayer = document.querySelector('.player-country-radio:checked');
+                const playerCountryId = Number(selectedPlayer?.value);
+                if (!Number.isInteger(playerCountryId) || playerCountryId <= 0) {
+                    alert('Debés elegir tu país para continuar.');
+                    return;
+                }
+                selectedPlayerCountryId = playerCountryId;
+                modalStep = 'bots';
+                renderBotSelector();
                 return;
             }
 
-            if (selectedCountries.length > 4) {
-                alert('Podés seleccionar entre 2 y 4 países.');
+            const selectedBots = Array.from(document.querySelectorAll('.bot-country-checkbox:checked'))
+                .map((checkbox) => Number(checkbox.value))
+                .filter((id) => Number.isInteger(id) && id > 0);
+            if (selectedBots.length < 1) {
+                alert('Debés elegir al menos 1 bot rival.');
                 return;
             }
+            if (selectedBots.length > 3) {
+                alert('Podés elegir hasta 3 bots rivales.');
+                return;
+            }
+            const selectedCountries = [selectedPlayerCountryId, ...selectedBots];
 
             try {
                 btnNuevaPartida.textContent = 'CREANDO PARTIDA...';
@@ -131,14 +175,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.addEventListener('change', (event) => {
-        if (!(event.target instanceof HTMLInputElement) || !event.target.classList.contains('country-checkbox')) {
+        if (!(event.target instanceof HTMLInputElement) || !event.target.classList.contains('bot-country-checkbox')) {
             return;
         }
 
-        const selected = document.querySelectorAll('.country-checkbox:checked');
-        if (selected.length > 4) {
+        const selected = document.querySelectorAll('.bot-country-checkbox:checked');
+        if (selected.length > 3) {
             event.target.checked = false;
-            alert('Podés seleccionar hasta 4 países.');
+            alert('Podés seleccionar hasta 3 bots.');
         }
     });
 });
