@@ -10,7 +10,9 @@ import {
   limpiarDatosDePartidas,
   incrementarMovimientosPartida,
   resetearMovimientosPartida,
-  marcarFortificacionRealizada
+  marcarFortificacionRealizada,
+  otorgarPresupuestoFortificacion,
+  gastarPresupuestoFortificacion
 } from "../bdd/partidas.js";
 import { obtenerPaises } from "../bdd/paises.js";
 import { obtenerTerrenos } from "../bdd/terrenos.js";
@@ -83,6 +85,12 @@ const getActionValidationError = (estado) => {
   return null;
 };
 
+const getEconomyBudgetForCountry = (estado, paisId) => {
+  const pais = (estado?.paises || []).find((p) => (p.pais_id || p.id) === paisId);
+  if (!pais) return 0;
+  return calculateEconomyPoints(pais.economia || 1);
+};
+
 // GET /api/partidas - Listar partidas
 endpointsPartidas.get("/", async (req, res) => {
   const partidas = await obtenerPartidas();
@@ -147,6 +155,19 @@ endpointsPartidas.post("/", async (req, res) => {
     return res.status(500).json({ error: "Error al crear la partida en base de datos." });
   }
 
+  const estadoInicial = await obtenerEstadoCompletoPartida(partidaCreada.id);
+  if (!estadoInicial) {
+    return res.status(500).json({ error: "No se pudo obtener el estado inicial de la partida." });
+  }
+
+  const turnoInicial = estadoInicial.partida?.turno_actual;
+  if (Number.isInteger(turnoInicial)) {
+    const presupuestoInicial = getEconomyBudgetForCountry(estadoInicial, turnoInicial);
+    if (presupuestoInicial > 0) {
+      await otorgarPresupuestoFortificacion(partidaCreada.id, turnoInicial, presupuestoInicial);
+    }
+  }
+
   const estadoCompleto = await obtenerEstadoCompletoPartida(partidaCreada.id);
   res.status(201).json(estadoCompleto);
 });
@@ -175,8 +196,9 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   const paisActivo = estado.paises.find(p => (p.pais_id || p.id) === activePlayerId);
   if (!paisActivo) return res.status(400).json({ error: "No se encontró el país activo." });
 
-  const economia = paisActivo.economia || 1;
-  const presupuesto = calculateEconomyPoints(economia);
+  const presupuesto = Number.isInteger(paisActivo.presupuesto_fortificacion)
+    ? paisActivo.presupuesto_fortificacion
+    : 0;
 
   const catalogTropas = await obtenerTiposTropas();
 
@@ -228,6 +250,10 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   }
 
   await actualizarTerritorio(territorio_id, activePlayerId, composicionFinal, catalogTropas || []);
+  const presupuestoActualizado = await gastarPresupuestoFortificacion(partidaId, activePlayerId, costoTotal);
+  if (!presupuestoActualizado) {
+    return res.status(400).json({ error: "No se pudo debitar el presupuesto de fortificación para esta compra." });
+  }
   await marcarFortificacionRealizada(partidaId);
   await incrementarMovimientosPartida(partidaId);
 
@@ -235,7 +261,9 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
   res.json({
     ...estadoActualizado,
     presupuesto_gastado: costoTotal,
-    presupuesto_disponible: presupuesto
+    presupuesto_disponible: Number.isInteger(presupuestoActualizado.presupuesto_fortificacion)
+      ? presupuestoActualizado.presupuesto_fortificacion
+      : 0
   });
 });
 
@@ -470,6 +498,10 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
   }
 
   await actualizarEstadoPartida(partidaId, siguientePaisId, 'en_curso');
+  const presupuestoPrimerTurnoBot = getEconomyBudgetForCountry(estado, siguientePaisId);
+  if (presupuestoPrimerTurnoBot > 0) {
+    await otorgarPresupuestoFortificacion(partidaId, siguientePaisId, presupuestoPrimerTurnoBot);
+  }
   estado = await obtenerEstadoCompletoPartida(partidaId);
 
   // 2. Bucle secuencial: Mientras el turno actual sea un BOT (distinto del jugador humano), la IA actúa
@@ -491,6 +523,16 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
       }
     }
 
+    const costoDespliegueBot = calculateDeploymentCost(
+      (botLog.deployments || [])
+        .filter((item) => Number.isInteger(item?.id_tipo_tropa) && Number.isInteger(item?.cantidad) && item.cantidad > 0)
+        .map((item) => ({ id_tipo_tropa: item.id_tipo_tropa, cantidad: item.cantidad })),
+      catalogTropas || []
+    );
+    if (costoDespliegueBot > 0) {
+      await gastarPresupuestoFortificacion(partidaId, botActualObj.pais_id || botActualObj.id, costoDespliegueBot);
+    }
+
     botLogs.push({
       botId: botActualObj.pais_id || botActualObj.id,
       botNombre: botActualObj.nombre || `Bot #${botActualObj.pais_id || botActualObj.id}`,
@@ -506,6 +548,12 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
 
     const proximoTurno = getNextActivePlayer(estado.paises, estado.partida.turno_actual);
     await actualizarEstadoPartida(partidaId, proximoTurno, 'en_curso');
+    if (Number.isInteger(proximoTurno)) {
+      const presupuestoNuevoTurno = getEconomyBudgetForCountry(estado, proximoTurno);
+      if (presupuestoNuevoTurno > 0) {
+        await otorgarPresupuestoFortificacion(partidaId, proximoTurno, presupuestoNuevoTurno);
+      }
+    }
     estado = await obtenerEstadoCompletoPartida(partidaId);
   }
 

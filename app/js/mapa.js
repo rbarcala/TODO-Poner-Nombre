@@ -35,6 +35,9 @@ let modoMoverActivo = false;
 let modoAtacarActivo = false;
 let partidaId = null;
 let catalogoTropas = [];
+let opcionesRefuerzoActuales = [];
+let seleccionRefuerzo = new Map();
+let modalRefuerzoAbierto = false;
 
 const FORMATO_COMPOSICION_EJEMPLO = "1:2,2:1";
 
@@ -68,6 +71,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function configurarEventosGlobales() {
     // Teclado
     document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modalRefuerzoAbierto) {
+            cerrarModalRefuerzo();
+            return;
+        }
         if (e.key === 'Escape' && territorioSeleccionado) {
             deseleccionarTerritorio();
         }
@@ -84,6 +91,9 @@ function configurarEventosGlobales() {
     document.getElementById('btn-atacar')?.addEventListener('click', () => activarModoEspecial('atacar'));
     document.getElementById('btn-pasar-turno')?.addEventListener('click', manejarPasarTurno);
     document.getElementById('btn-salir')?.addEventListener('click', manejarSalirAlMenu);
+    document.getElementById('btn-cerrar-refuerzo')?.addEventListener('click', cerrarModalRefuerzo);
+    document.getElementById('btn-confirmar-refuerzo')?.addEventListener('click', confirmarCompraRefuerzo);
+    document.getElementById('refuerzo-lista')?.addEventListener('click', manejarClickSelectorRefuerzo);
 }
 
 //INTERFAZ
@@ -139,6 +149,7 @@ function deseleccionarTerritorio() {
     territorioSeleccionado = null;
     modoMoverActivo = false;
     modoAtacarActivo = false;
+    cerrarModalRefuerzo();
     
     document.getElementById('panel-acciones').style.display = 'none';
     ocultarPanel('panel-mover-tropas');
@@ -175,30 +186,25 @@ function procesarSeleccionNormal(territorioDestino) {
 //ACCIONES DE JUEGO (REFORZAR, MOVER, ATACAR)
 async function manejarRefuerzo() {
     if (!territorioSeleccionado) return;
+    if (estadoJuego?.partida?.ha_fortificado) {
+        alert("Ya realizaste la fortificación de este turno.");
+        return;
+    }
     try {
         const presupuesto = obtenerPresupuestoFortificacion();
-        const composicion = await solicitarComposicionPorPrompt({
-            titulo: `Refuerzo en ${territorioSeleccionado.nombre || `Territorio #${territorioSeleccionado.id}`}`,
-            opciones: await obtenerOpcionesRefuerzo(),
-            maximoTotal: null,
-            presupuestoMaximo: presupuesto
-        });
-
-        if (!composicion) {
+        if (presupuesto <= 0) {
+            alert("No tenés presupuesto de fortificación disponible.");
             return;
         }
 
-        const nuevoEstado = await apiReforzarTerritorio(partidaId, territorioSeleccionado.id, composicion);
-        estadoJuego = nuevoEstado;
-        territorioSeleccionado = estadoJuego.territorios.find(t => t.id === territorioSeleccionado.id);
-        
-        if (territorioSeleccionado) {
-            actualizarSubtituloPanel(territorioSeleccionado);
+        opcionesRefuerzoActuales = await obtenerOpcionesRefuerzo();
+        if (!opcionesRefuerzoActuales.length) {
+            alert("No hay tipos de tropa disponibles para reforzar.");
+            return;
         }
-        
-        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
-        actualizarInfoTurno();
-        deseleccionarTerritorio();
+
+        seleccionRefuerzo = new Map(opcionesRefuerzoActuales.map((item) => [item.id_tipo_tropa, 0]));
+        abrirModalRefuerzo(territorioSeleccionado, presupuesto);
     } catch (error) {
         console.error("Error al reforzar:", error);
         alert(`No se pudo reforzar:\n- ${error.message}`);
@@ -344,8 +350,10 @@ function actualizarInfoTurno() {
         info.innerHTML = `Turno de: <strong>${nombrePais}</strong><br><span style="font-size:11px; opacity:0.9;">Acciones del turno: ${movsUsados}/2</span>`;
 
         if (presupuestoInfo) {
-            const presupuesto = calcularPuntosEconomia(paisActivo?.economia || 1);
-            presupuestoInfo.textContent = `Presupuesto de fortificación: ${presupuesto} pts`;
+            const presupuesto = Number.isInteger(paisActivo?.presupuesto_fortificacion)
+                ? paisActivo.presupuesto_fortificacion
+                : 0;
+            presupuestoInfo.textContent = `Presupuesto de fortificación acumulado: ${presupuesto} pts`;
         }
     }
 }
@@ -615,6 +623,150 @@ function actualizarSubtituloPanel(territorio) {
     subtitulo.innerHTML = `Perteneciente a ${territorio.pais_duenio_nombre} (${territorio.tropas_actuales} tropas)<br><span style="font-size:11px; opacity:0.9;">${formatearComposicion(territorio.composicion_tropas)}</span>`;
 }
 
+function abrirModalRefuerzo(territorio, presupuestoDisponible) {
+    const modal = document.getElementById('modal-refuerzo');
+    const titulo = document.getElementById('refuerzo-titulo');
+    const subtitulo = document.getElementById('refuerzo-subtitulo');
+    const presupuesto = document.getElementById('refuerzo-presupuesto');
+    if (!modal || !titulo || !subtitulo || !presupuesto) return;
+
+    titulo.textContent = `Reforzar ${territorio.nombre || `Territorio #${territorio.id}`}`;
+    subtitulo.textContent = `Seleccioná las tropas a comprar para ${territorio.pais_duenio_nombre}.`;
+    presupuesto.textContent = `Presupuesto disponible: ${presupuestoDisponible} pts`;
+
+    document.getElementById('panel-acciones').style.display = 'none';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    modalRefuerzoAbierto = true;
+
+    renderOpcionesRefuerzo();
+    actualizarResumenRefuerzo();
+}
+
+function cerrarModalRefuerzo() {
+    const modal = document.getElementById('modal-refuerzo');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    modalRefuerzoAbierto = false;
+
+    if (territorioSeleccionado) {
+        document.getElementById('panel-acciones').style.display = 'flex';
+    }
+}
+
+function renderOpcionesRefuerzo() {
+    const contenedor = document.getElementById('refuerzo-lista');
+    if (!contenedor) return;
+
+    if (!opcionesRefuerzoActuales.length) {
+        contenedor.innerHTML = '<p class="text-sm text-slate-400">No hay tropas disponibles.</p>';
+        return;
+    }
+
+    contenedor.innerHTML = opcionesRefuerzoActuales.map((opcion) => {
+        const cantidad = seleccionRefuerzo.get(opcion.id_tipo_tropa) || 0;
+        const costo = Number.isInteger(opcion.costo) ? opcion.costo : 1;
+        const dadoMin = Number.isInteger(opcion.dado_min) ? opcion.dado_min : 1;
+        const dadoMax = Number.isInteger(opcion.dado_max) ? opcion.dado_max : 6;
+        return `
+            <div class="rounded-lg border border-slate-700 bg-slate-950/70 p-3 space-y-2">
+                <div>
+                    <p class="text-sm font-bold text-slate-100">${opcion.tipo || `Tipo #${opcion.id_tipo_tropa}`}</p>
+                    <p class="text-xs text-slate-400">Costo: ${costo} pts | Dado: ${dadoMin}-${dadoMax}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button data-refuerzo-id="${opcion.id_tipo_tropa}" data-refuerzo-action="decrease" class="rounded bg-slate-700 px-3 py-1 text-sm font-bold hover:bg-slate-600">-</button>
+                    <span class="min-w-[28px] text-center font-semibold">${cantidad}</span>
+                    <button data-refuerzo-id="${opcion.id_tipo_tropa}" data-refuerzo-action="increase" class="rounded bg-slate-700 px-3 py-1 text-sm font-bold hover:bg-slate-600">+</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function actualizarResumenRefuerzo() {
+    const resumen = document.getElementById('refuerzo-resumen');
+    if (!resumen) return;
+
+    const composicion = construirComposicionRefuerzo();
+    const totalTropas = totalComposicion(composicion);
+    const costoTotal = calcularCostoComposicion(composicion, opcionesRefuerzoActuales);
+    const disponible = obtenerPresupuestoFortificacion();
+    resumen.textContent = `Seleccionado: ${totalTropas} tropas | Costo: ${costoTotal} pts | Disponible: ${disponible} pts`;
+}
+
+function manejarClickSelectorRefuerzo(event) {
+    const boton = event.target.closest('button[data-refuerzo-id][data-refuerzo-action]');
+    if (!boton) return;
+
+    const idTipo = Number(boton.getAttribute('data-refuerzo-id'));
+    const action = boton.getAttribute('data-refuerzo-action');
+    if (!Number.isInteger(idTipo)) return;
+
+    const valorActual = seleccionRefuerzo.get(idTipo) || 0;
+    if (action === 'decrease') {
+        seleccionRefuerzo.set(idTipo, Math.max(0, valorActual - 1));
+        renderOpcionesRefuerzo();
+        actualizarResumenRefuerzo();
+        return;
+    }
+
+    if (action === 'increase') {
+        const opcion = opcionesRefuerzoActuales.find((item) => item.id_tipo_tropa === idTipo);
+        const costoUnitario = Number.isInteger(opcion?.costo) ? opcion.costo : 1;
+        const composicionActual = construirComposicionRefuerzo();
+        const costoActual = calcularCostoComposicion(composicionActual, opcionesRefuerzoActuales);
+        const presupuesto = obtenerPresupuestoFortificacion();
+
+        if ((costoActual + costoUnitario) > presupuesto) {
+            alert("No alcanza el presupuesto para agregar esa tropa.");
+            return;
+        }
+
+        seleccionRefuerzo.set(idTipo, valorActual + 1);
+        renderOpcionesRefuerzo();
+        actualizarResumenRefuerzo();
+    }
+}
+
+function construirComposicionRefuerzo() {
+    return Array.from(seleccionRefuerzo.entries())
+        .filter(([, cantidad]) => Number.isInteger(cantidad) && cantidad > 0)
+        .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
+}
+
+async function confirmarCompraRefuerzo() {
+    if (!territorioSeleccionado) {
+        cerrarModalRefuerzo();
+        return;
+    }
+
+    const composicion = construirComposicionRefuerzo();
+    if (!composicion.length) {
+        alert("Debés seleccionar al menos una tropa para confirmar la compra.");
+        return;
+    }
+
+    try {
+        const nuevoEstado = await apiReforzarTerritorio(partidaId, territorioSeleccionado.id, composicion);
+        estadoJuego = nuevoEstado;
+        territorioSeleccionado = estadoJuego.territorios.find(t => t.id === territorioSeleccionado.id);
+
+        if (territorioSeleccionado) {
+            actualizarSubtituloPanel(territorioSeleccionado);
+        }
+
+        cerrarModalRefuerzo();
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
+        deseleccionarTerritorio();
+    } catch (error) {
+        console.error("Error al confirmar refuerzo:", error);
+        alert(`No se pudo reforzar:\n- ${error.message}`);
+    }
+}
+
 function obtenerOpcionesDesdeTerritorio(territorio) {
     const composicion = Array.isArray(territorio?.composicion_tropas) ? territorio.composicion_tropas : [];
     return composicion
@@ -664,7 +816,10 @@ function calcularPuntosEconomia(economia) {
 function obtenerPresupuestoFortificacion() {
     const turnoActual = estadoJuego?.partida?.turno_actual;
     const paisActivo = estadoJuego?.paises?.find((p) => (p.pais_id === turnoActual || p.id === turnoActual));
-    return calcularPuntosEconomia(paisActivo?.economia || 1);
+    if (Number.isInteger(paisActivo?.presupuesto_fortificacion)) {
+        return paisActivo.presupuesto_fortificacion;
+    }
+    return 0;
 }
 
 function armarMensajeComposicion(titulo, opciones, maximoTotal, presupuestoMaximo) {
