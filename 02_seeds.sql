@@ -27,11 +27,12 @@ WHERE NOT EXISTS (
 );
 
 -- Tipos de tropas
-INSERT INTO tipos_de_tropas (tipo, descripcion, dado_min, dado_max) VALUES
-('Infanteria', 'Tropa estandar versatil', 1, 6),
-('Caballeria', 'Tropa rapida de asalto', 2, 6),
-('Artilleria', 'Tropa de ataque pesado', 1, 8)
+INSERT INTO tipos_de_tropas (tipo, descripcion, dado_min, dado_max, costo) VALUES
+('Infanteria', 'Tropa estandar versatil', 1, 4, 1),
+('Caballeria', 'Tropa rapida de asalto', 2, 4, 2),
+('Artilleria', 'Tropa de ataque pesado', 1, 8, 3)
 ON CONFLICT (tipo) DO UPDATE SET
 descripcion = EXCLUDED.descripcion,
 dado_min = EXCLUDED.dado_min,
-dado_max = EXCLUDED.dado_max;
+dado_max = EXCLUDED.dado_max,
+costo = EXCLUDED.costo;

@@ -2,7 +2,7 @@
  * Módulo de Inteligencia Artificial y Toma de Decisiones del Bot/NPC
  */
 
-import { areAdjacent, calculateReinforcements, calculateEconomyPoints } from './gameLogic.js';
+import { areAdjacent } from './gameLogic.js';
 
 /**
  * Determina dónde debe desplegar el Bot sus tropas de refuerzo.
@@ -19,8 +19,10 @@ import { areAdjacent, calculateReinforcements, calculateEconomyPoints } from './
 export function getBotDeployment(botCountry, botTerritories, allTerritories, fronteras, troopTypesCatalog = []) {
     const botId = botCountry.pais_id !== undefined ? botCountry.pais_id : botCountry.id;
 
-    // Calcular presupuesto y tipo de tropa más barato disponible
-    const presupuesto = calculateEconomyPoints(botCountry.economia || 1);
+    // Usar presupuesto acumulado persistente del país en partida
+    const presupuesto = Number.isInteger(botCountry?.presupuesto_fortificacion)
+        ? botCountry.presupuesto_fortificacion
+        : 0;
     const catalogoOrdenado = (troopTypesCatalog || [])
         .filter(t => Number.isInteger(t?.id) && t.id > 0 && Number.isInteger(t?.costo) && t.costo > 0)
         .sort((a, b) => a.costo - b.costo);

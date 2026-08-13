@@ -138,6 +138,7 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        await client.query('ALTER TABLE paises_partidas ADD COLUMN IF NOT EXISTS presupuesto_fortificacion INTEGER DEFAULT 0;');
         const idTipoInfanteria = await obtenerTipoInfanteriaId(client, troopTypesCatalog);
 
         const primerPaisId = paisesParticipantesIds[0];
@@ -152,7 +153,8 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
         // 2. Asociar países a la partida
         for (const paisId of paisesParticipantesIds) {
             await client.query(
-                `INSERT INTO paises_partidas (pais_id, partida_id, tropas_actuales, eliminado) VALUES ($1, $2, $3, false)`,
+                `INSERT INTO paises_partidas (pais_id, partida_id, tropas_actuales, eliminado, presupuesto_fortificacion)
+                 VALUES ($1, $2, $3, false, 0)`,
                 [paisId, partida.id, 0]
             );
         }
@@ -317,6 +319,7 @@ export const asegurarColumnasPartida = async () => {
     try {
         await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS movimientos_realizados INTEGER DEFAULT 0;');
         await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS ha_fortificado BOOLEAN DEFAULT FALSE;');
+        await pool.query('ALTER TABLE paises_partidas ADD COLUMN IF NOT EXISTS presupuesto_fortificacion INTEGER DEFAULT 0;');
     } catch (e) {
         // Ignorar si ya existen
     }
@@ -357,6 +360,46 @@ export const resetearMovimientosPartida = async (partidaId) => {
         const res = await pool.query(
             'UPDATE partidas SET movimientos_realizados = 0, ha_fortificado = FALSE WHERE id = $1 RETURNING *',
             [partidaId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
+    }
+};
+
+export const otorgarPresupuestoFortificacion = async (partidaId, paisId, puntos) => {
+    await asegurarColumnasPartida();
+    const puntosEnteros = Number.isInteger(puntos) && puntos > 0 ? puntos : 0;
+    if (puntosEnteros <= 0) return undefined;
+
+    try {
+        const res = await pool.query(
+            `UPDATE paises_partidas
+             SET presupuesto_fortificacion = COALESCE(presupuesto_fortificacion, 0) + $1
+             WHERE partida_id = $2 AND pais_id = $3
+             RETURNING *`,
+            [puntosEnteros, partidaId, paisId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
+    }
+};
+
+export const gastarPresupuestoFortificacion = async (partidaId, paisId, costo) => {
+    await asegurarColumnasPartida();
+    const costoEntero = Number.isInteger(costo) && costo > 0 ? costo : 0;
+    if (costoEntero <= 0) return undefined;
+
+    try {
+        const res = await pool.query(
+            `UPDATE paises_partidas
+             SET presupuesto_fortificacion = COALESCE(presupuesto_fortificacion, 0) - $1
+             WHERE partida_id = $2
+               AND pais_id = $3
+               AND COALESCE(presupuesto_fortificacion, 0) >= $1
+             RETURNING *`,
+            [costoEntero, partidaId, paisId]
         );
         return res.rows[0];
     } catch (e) {

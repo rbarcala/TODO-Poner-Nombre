@@ -4,6 +4,23 @@ const state = {
   tropas: []
 };
 
+const COLOR_PALETTE = [
+  { nombre: 'Amarillo', hex: '#FFD700' },
+  { nombre: 'Rojo', hex: '#FF0000' },
+  { nombre: 'Azul', hex: '#0000FF' },
+  { nombre: 'Naranja', hex: '#FF8C00' },
+  { nombre: 'Verde', hex: '#008000' },
+  { nombre: 'Violeta', hex: '#8A2BE2' },
+  { nombre: 'Ambar', hex: '#FFBF00' },
+  { nombre: 'Bermillon', hex: '#E34234' },
+  { nombre: 'Carmin', hex: '#960018' },
+  { nombre: 'Indigo', hex: '#4B0082' },
+  { nombre: 'Turquesa', hex: '#40E0D0' },
+  { nombre: 'Chartreuse', hex: '#7FFF00' }
+];
+const ALLOWED_COLORS = new Set(COLOR_PALETTE.map((color) => color.hex.toUpperCase()));
+const formPlaceholders = new Map();
+
 const API_BASE_URLS = ['http://localhost:8000', 'http://localhost:3000'];
 
 const endpoints = {
@@ -51,6 +68,46 @@ function showForm(entity) {
 
 function hideForms() {
   document.querySelectorAll('form').forEach((form) => form.classList.add('hidden'));
+}
+
+function renderColorPaletteOptions() {
+  document.querySelectorAll('select[name="color_hex"]').forEach((select) => {
+    const selectedValue = (select.value || '').toUpperCase();
+    const options = ['<option value="" disabled>Seleccionar color...</option>']
+      .concat(COLOR_PALETTE.map((color) => `<option value="${color.hex}">${color.nombre}</option>`));
+    select.innerHTML = options.join('');
+    if (selectedValue && ALLOWED_COLORS.has(selectedValue)) {
+      select.value = selectedValue;
+    } else {
+      select.selectedIndex = 0;
+    }
+  });
+}
+
+function captureInitialPlaceholders() {
+  document.querySelectorAll('form').forEach((form) => {
+    const formDomId = form.getAttribute('id');
+    if (!formDomId) return;
+    const perForm = {};
+    form.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((field) => {
+      const key = field.getAttribute('name');
+      if (!key) return;
+      perForm[key] = field.getAttribute('placeholder') || '';
+    });
+    formPlaceholders.set(formDomId, perForm);
+  });
+}
+
+function restorePlaceholders(form) {
+  if (!form) return;
+  const perForm = formPlaceholders.get(form.id);
+  if (!perForm) return;
+  Object.entries(perForm).forEach(([name, placeholder]) => {
+    const field = form.querySelector(`[name="${name}"]`);
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+      field.placeholder = placeholder;
+    }
+  });
 }
 
 function renderList(entity, items) {
@@ -150,6 +207,8 @@ function resetForm(entity) {
   const form = document.getElementById(`form-${entity}`);
   if (!form) return;
   form.reset();
+  restorePlaceholders(form);
+  renderColorPaletteOptions();
 
   const idInput = form.querySelector('input[name="id"]');
   if (idInput) {
@@ -251,7 +310,7 @@ async function handleSubmit(form) {
     const terrainId = Number(payload.terreno_id);
     if (payload.id) normalized.id = Number(payload.id);
     normalized.nombre = payload.nombre;
-    normalized.color_hex = payload.color_hex;
+    normalized.color_hex = String(payload.color_hex || '').toUpperCase();
     normalized.economia = Number(payload.economia);
     normalized.tecnologia = Number(payload.tecnologia);
     normalized.agresividad = Number(payload.agresividad);
@@ -276,9 +335,14 @@ async function handleSubmit(form) {
     if (payload.id) normalized.id = Number(payload.id);
     normalized.nombre = payload.nombre;
     normalized.descripcion = payload.descripcion;
-    normalized.color_hex = payload.color_hex;
+    normalized.color_hex = String(payload.color_hex || '').toUpperCase();
     normalized.modificador_ataque = Number(payload.modificador_ataque);
     normalized.modificador_defensa = Number(payload.modificador_defensa);
+  }
+
+  if ((entity === 'paises' || entity === 'terrenos') && !ALLOWED_COLORS.has(normalized.color_hex)) {
+    alert('Debés elegir un color de la paleta disponible.');
+    return;
   }
 
   try {
@@ -289,22 +353,48 @@ async function handleSubmit(form) {
 }
 
 function initEditor() {
+  captureInitialPlaceholders();
+  renderColorPaletteOptions();
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      const activeButton = document.activeElement;
+      if (activeButton instanceof HTMLButtonElement && activeButton.dataset.action === 'cancel') {
+        event.preventDefault();
+        const formId = activeButton.closest('form')?.getAttribute('id') || '';
+        const entity = formId.replace('form-', '');
+        if (entity) resetForm(entity);
+        return;
+      }
+    }
+
+    if (event.key !== 'Escape') return;
+    const visibleForm = document.querySelector('form:not(.hidden)');
+    if (!(visibleForm instanceof HTMLFormElement)) return;
+    event.preventDefault();
+    const entity = (visibleForm.getAttribute('id') || '').replace('form-', '');
+    if (!entity) return;
+    resetForm(entity);
+  });
+
   document.addEventListener('click', async (event) => {
     const target = event.target instanceof HTMLElement ? event.target.closest('button[data-action]') : null;
+
+    if (target instanceof HTMLElement && target.dataset.action === 'cancel') {
+      event.preventDefault();
+      event.stopPropagation();
+      const formId = target.closest('form')?.getAttribute('id') || '';
+      const entity = formId.replace('form-', '');
+      resetForm(entity);
+      return;
+    }
 
     const addButton = event.target instanceof HTMLElement ? event.target.closest('.add-btn') : null;
     if (addButton instanceof HTMLElement) {
       const entity = addButton.dataset.entity;
       resetForm(entity);
+      restorePlaceholders(document.getElementById(`form-${entity}`));
       showForm(entity);
-      return;
-    }
-
-    const cancelButton = event.target instanceof HTMLElement ? event.target.closest('.cancel-btn') : null;
-    if (cancelButton instanceof HTMLElement) {
-      const formId = cancelButton.closest('form')?.id || '';
-      const entity = formId.replace('form-', '');
-      resetForm(entity);
       return;
     }
 
@@ -349,6 +439,7 @@ function initEditor() {
         setFieldValue(form, 'modificador_defensa', item.modificador_defensa);
       }
 
+      restorePlaceholders(form);
       showForm(entity);
       return;
     }
