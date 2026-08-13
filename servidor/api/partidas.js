@@ -536,8 +536,37 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
     botLogs.push({
       botId: botActualObj.pais_id || botActualObj.id,
       botNombre: botActualObj.nombre || `Bot #${botActualObj.pais_id || botActualObj.id}`,
-      deployments: botLog.deployments || [],
-      combats: botLog.combatLogs || []
+      deployments: (botLog.deployments || []).map((dep) => {
+        const territorio = (estado.territorios || []).find((t) => t.id === dep.territorio_id);
+        const tipo = (catalogTropas || []).find((tt) => tt.id === dep.id_tipo_tropa);
+        return {
+          ...dep,
+          tipo_tropa: tipo?.tipo || `Tipo #${dep.id_tipo_tropa}`,
+          territorio_nombre: territorio?.nombre || `Territorio #${dep.territorio_id}`,
+          coord_x: territorio?.coord_x,
+          coord_y: territorio?.coord_y
+        };
+      }),
+      combats: (botLog.combatLogs || []).map((combat) => {
+        const origen = (estado.territorios || []).find((t) => t.id === combat.origen_id);
+        const destino = (estado.territorios || []).find((t) => t.id === combat.destino_id);
+        const enrichComposition = (composition) => (composition || []).map((item) => {
+          const tipo = (catalogTropas || []).find((tt) => tt.id === item.id_tipo_tropa);
+          return { ...item, tipo: tipo?.tipo || `Tipo #${item.id_tipo_tropa}` };
+        });
+        return {
+          ...combat,
+          origen_nombre: origen?.nombre || `Territorio #${combat.origen_id}`,
+          destino_nombre: destino?.nombre || `Territorio #${combat.destino_id}`,
+          origen_coord_x: origen?.coord_x,
+          origen_coord_y: origen?.coord_y,
+          destino_coord_x: destino?.coord_x,
+          destino_coord_y: destino?.coord_y,
+          composicion_atacante: enrichComposition(combat.composicion_atacante),
+          attackerEliminatedComposition: enrichComposition(combat.attackerEliminatedComposition),
+          defenderEliminatedComposition: enrichComposition(combat.defenderEliminatedComposition)
+        };
+      })
     });
 
     if (botLog.isGameOver) {

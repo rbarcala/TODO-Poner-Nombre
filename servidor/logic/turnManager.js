@@ -62,6 +62,18 @@ function legacySingleTypeComposition(count, troopTypesCatalog = []) {
     return [{ id_tipo_tropa: firstTypeId, cantidad: qty }];
 }
 
+function summarizeComposition(composition) {
+    if (!Array.isArray(composition) || composition.length === 0) return [];
+    const map = new Map();
+    for (const item of composition) {
+        const idTipo = Number(item?.id_tipo_tropa);
+        const cantidad = Number.isInteger(item?.cantidad) ? item.cantidad : 0;
+        if (!Number.isInteger(idTipo) || cantidad <= 0) continue;
+        map.set(idTipo, (map.get(idTipo) || 0) + cantidad);
+    }
+    return Array.from(map.entries()).map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
+}
+
 /**
  * Determina cuál es la siguiente civilización activa en la partida, omitiendo las eliminadas.
  * 
@@ -251,11 +263,24 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
             origen_id: origin.id,
             destino_id: target.id,
             tropas_atacantes: attack.tropas_atacantes,
+            composicion_atacante: summarizeComposition(composicionAtaque),
             tropas_defensoras: target.tropas_actuales,
             totalAttack: combatResult.totalAttack,
             totalDefense: combatResult.totalDefense,
+            totalAttackBase: combatResult.totalAttackBase,
+            totalDefenseBase: combatResult.totalDefenseBase,
+            modAttackUsed: combatResult.modAttackUsed,
+            modDefenseUsed: combatResult.modDefenseUsed,
+            attackRolls: combatResult.attackRolls || [],
+            defenseRolls: combatResult.defenseRolls || [],
             attackerWins: combatResult.attackerWins,
-            autoConquest: !!combatResult.autoConquest
+            autoConquest: !!combatResult.autoConquest,
+            attackerCasualties: combatResult.attackerCasualties || 0,
+            defenderCasualties: combatResult.defenderCasualties || 0,
+            attackerUnitsRolled: combatResult.attackerUnitsRolled || [],
+            defenderUnitsRolled: combatResult.defenderUnitsRolled || [],
+            attackerEliminatedComposition: combatResult.attackerEliminatedComposition || [],
+            defenderEliminatedComposition: combatResult.defenderEliminatedComposition || []
         };
 
         turnLog.combatLogs.push(combatLog);

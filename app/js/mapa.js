@@ -41,7 +41,9 @@ let modalRefuerzoAbierto = false;
 let opcionesAtaqueActuales = [];
 let seleccionAtaque = new Map();
 let modalAtaqueAbierto = false;
+let modalBotResumenAbierto = false;
 let territorioDestinoAtaque = null;
+let resolverModalBotResumen = null;
 
 const FORMATO_COMPOSICION_EJEMPLO = "1:2,2:1";
 
@@ -83,6 +85,10 @@ function configurarEventosGlobales() {
             cerrarModalAtaque();
             return;
         }
+        if (e.key === 'Escape' && modalBotResumenAbierto) {
+            cerrarModalResumenBot();
+            return;
+        }
         if (e.key === 'Escape' && modoAtacarActivo && territorioSeleccionado) {
             modoAtacarActivo = false;
             territorioOrigenMover = null;
@@ -112,6 +118,7 @@ function configurarEventosGlobales() {
     document.getElementById('btn-cerrar-ataque')?.addEventListener('click', cerrarModalAtaque);
     document.getElementById('btn-confirmar-ataque')?.addEventListener('click', confirmarAtaqueModal);
     document.getElementById('ataque-lista')?.addEventListener('click', manejarClickSelectorAtaque);
+    document.getElementById('btn-cerrar-bot-resumen')?.addEventListener('click', cerrarModalResumenBot);
 }
 
 //INTERFAZ
@@ -357,28 +364,10 @@ async function manejarPasarTurno() {
         estadoJuego = data.estado;
         
         if (data.botLogs && data.botLogs.length > 0) {
-            let logText = `🤖 ACCIONES DE LAS IAs ESTE TURNO:\n`;
-
-            data.botLogs.forEach((bot, index) => {
-                logText += `\n----------------------------------------\n`;
-                logText += `📌 ${index + 1}. TURNO DE: ${bot.botNombre.toUpperCase()}\n`;
-
-                if (bot.deployments && bot.deployments.length > 0) {
-                    const totalRefuerzos = bot.deployments.reduce((a, b) => a + b.cantidad, 0);
-                    logText += `  • Refuerzos: Desplegó ${totalRefuerzos} tropas.\n`;
-                }
-
-                if (bot.combats && bot.combats.length > 0) {
-                    logText += `  • Combates realizados:\n`;
-                    bot.combats.forEach(c => {
-                        logText += `    - Atacó sector #${c.destino_id} con ${c.tropas_atacantes} tropas: ${c.attackerWins ? '¡CONQUISTADO! 🚩' : 'REPELIDO 🛡️'}\n`;
-                    });
-                } else {
-                    logText += `  • Combates: Decidió no atacar este turno.\n`;
-                }
-            });
-
-            alert(logText);
+            for (let index = 0; index < data.botLogs.length; index++) {
+                const bot = data.botLogs[index];
+                await mostrarResumenTurnoBot(bot, index);
+            }
         }
 
         dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
@@ -389,6 +378,92 @@ async function manejarPasarTurno() {
         console.error("Error al pasar turno:", error);
         alert(`No se pudo pasar de turno:\n- ${error.message}`);
     }
+}
+
+function formatearResumenTurnoBot(bot, index) {
+    let texto = `🤖 TURNO BOT ${index + 1}: ${String(bot.botNombre || `Bot #${bot.botId}`).toUpperCase()}\n`;
+
+    if (bot.deployments && bot.deployments.length > 0) {
+        texto += `\nUNIDADES FORTIFICADAS:\n`;
+        bot.deployments.forEach((dep) => {
+            const coordX = Number.isInteger(dep.coord_x) ? dep.coord_x : "?";
+            const coordY = Number.isInteger(dep.coord_y) ? dep.coord_y : "?";
+            texto += `- ${dep.tipo_tropa || `Tipo #${dep.id_tipo_tropa}`} x${dep.cantidad} en ${dep.territorio_nombre || `Territorio #${dep.territorio_id}`} (${coordX}, ${coordY})\n`;
+        });
+    } else {
+        texto += `\nUNIDADES FORTIFICADAS:\n- No fortificó este turno.\n`;
+    }
+
+    if (bot.combats && bot.combats.length > 0) {
+        texto += `\nACCIONES REALIZADAS:\n`;
+        bot.combats.forEach((combat, idx) => {
+            texto += `\n${idx + 1}) ATAQUE ${combat.attackerWins ? "EXITOSO" : "RECHAZADO"}\n`;
+            texto += `Origen: ${combat.origen_nombre || `Territorio #${combat.origen_id}`} (${combat.origen_coord_x ?? "?"}, ${combat.origen_coord_y ?? "?"})\n`;
+            texto += `Destino: ${combat.destino_nombre || `Territorio #${combat.destino_id}`} (${combat.destino_coord_x ?? "?"}, ${combat.destino_coord_y ?? "?"})\n`;
+            texto += `Unidades atacante: ${formatearComposicionSimple(combat.composicion_atacante || [])}\n`;
+            texto += `UNIDADES PARTICIPANTES:\n`;
+            texto += `Participantes atacante: ${resumirUnidadesPorTipo(combat.attackerUnitsRolled || [])}\n`;
+            texto += `Participantes defensor: ${resumirUnidadesPorTipo(combat.defenderUnitsRolled || [])}\n`;
+            texto += `TIRADAS POR UNIDAD:\n`;
+            texto += `Tiradas atacante:\n${formatearTiradasPorUnidad(combat.attackerUnitsRolled || [])}\n`;
+            texto += `Tiradas defensor:\n${formatearTiradasPorUnidad(combat.defenderUnitsRolled || [])}\n`;
+            const modAtkStr = combat.modAttackUsed !== 1 ? ` (Mod. Terreno: x${combat.modAttackUsed})` : "";
+            const modDefStr = combat.modDefenseUsed !== 1 ? ` (Mod. Terreno: x${combat.modDefenseUsed})` : "";
+            texto += `RESUMEN DE DADOS:\n`;
+            texto += `Resumen dados atacante: [${(combat.attackRolls || []).join(", ")}] -> ${combat.totalAttackBase}${modAtkStr} = ${combat.totalAttack}\n`;
+            texto += `Resumen dados defensor: [${(combat.defenseRolls || []).join(", ")}] -> ${combat.totalDefenseBase}${modDefStr} = ${combat.totalDefense}\n`;
+            texto += `BAJAS:\n`;
+            texto += `Bajas atacante: ${combat.attackerCasualties || 0} (${formatearComposicionSimple(combat.attackerEliminatedComposition || [])})\n`;
+            texto += `Bajas defensor: ${combat.defenderCasualties || 0} (${formatearComposicionSimple(combat.defenderEliminatedComposition || [])})\n`;
+        });
+    } else {
+        texto += `\nACCIONES REALIZADAS:\n- No atacó este turno.\n`;
+    }
+
+    return texto;
+}
+
+function abrirModalResumenBot(titulo, contenido) {
+    const modal = document.getElementById('modal-bot-resumen');
+    const tituloEl = document.getElementById('bot-resumen-titulo');
+    const contenidoEl = document.getElementById('bot-resumen-contenido');
+    if (!modal || !tituloEl || !contenidoEl) return;
+
+    tituloEl.textContent = titulo;
+    contenidoEl.textContent = contenido;
+    contenidoEl.scrollTop = 0;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    modalBotResumenAbierto = true;
+}
+
+function cerrarModalResumenBot() {
+    const modal = document.getElementById('modal-bot-resumen');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    modalBotResumenAbierto = false;
+
+    if (typeof resolverModalBotResumen === 'function') {
+        const resolver = resolverModalBotResumen;
+        resolverModalBotResumen = null;
+        resolver();
+    }
+}
+
+function mostrarResumenTurnoBot(bot, index) {
+    return new Promise((resolve) => {
+        if (typeof resolverModalBotResumen === 'function') {
+            const resolverAnterior = resolverModalBotResumen;
+            resolverModalBotResumen = null;
+            resolverAnterior();
+        }
+        const titulo = `🤖 TURNO BOT ${index + 1}: ${String(bot.botNombre || `Bot #${bot.botId}`).toUpperCase()}`;
+        const contenido = formatearResumenTurnoBot(bot, index);
+        resolverModalBotResumen = resolve;
+        abrirModalResumenBot(titulo, contenido);
+    });
 }
 
 //LLAMADAS A LA API (FETCH)
