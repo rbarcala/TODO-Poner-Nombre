@@ -34,6 +34,9 @@ let territorioOrigenMover = null;
 let modoMoverActivo = false;
 let modoAtacarActivo = false;
 let partidaId = null;
+let catalogoTropas = [];
+
+const FORMATO_COMPOSICION_EJEMPLO = "1:2,2:1";
 
 //INICIALIZACION
 document.addEventListener('DOMContentLoaded', () => {
@@ -80,6 +83,7 @@ function configurarEventosGlobales() {
     document.getElementById('btn-mover')?.addEventListener('click', () => activarModoEspecial('mover'));
     document.getElementById('btn-atacar')?.addEventListener('click', () => activarModoEspecial('atacar'));
     document.getElementById('btn-pasar-turno')?.addEventListener('click', manejarPasarTurno);
+    document.getElementById('btn-salir')?.addEventListener('click', manejarSalirAlMenu);
 }
 
 //INTERFAZ
@@ -123,10 +127,9 @@ function seleccionarTerritorio(territorio) {
     territorioSeleccionado = territorio;
     const panel = document.getElementById('panel-acciones');
     const titulo = document.getElementById('panel-titulo');
-    const subtitulo = document.getElementById('panel-subtitulo');
     
     titulo.textContent = territorio.nombre || `Territorio #${territorio.id}`;
-    subtitulo.textContent = `Perteneciente a ${territorio.pais_duenio_nombre} (${territorio.tropas_actuales} tropas)`;
+    actualizarSubtituloPanel(territorio);
     
     panel.style.display = 'flex';
     dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
@@ -173,13 +176,24 @@ function procesarSeleccionNormal(territorioDestino) {
 async function manejarRefuerzo() {
     if (!territorioSeleccionado) return;
     try {
-        const nuevoEstado = await apiReforzarTerritorio(partidaId, territorioSeleccionado.id);
+        const presupuesto = obtenerPresupuestoFortificacion();
+        const composicion = await solicitarComposicionPorPrompt({
+            titulo: `Refuerzo en ${territorioSeleccionado.nombre || `Territorio #${territorioSeleccionado.id}`}`,
+            opciones: await obtenerOpcionesRefuerzo(),
+            maximoTotal: null,
+            presupuestoMaximo: presupuesto
+        });
+
+        if (!composicion) {
+            return;
+        }
+
+        const nuevoEstado = await apiReforzarTerritorio(partidaId, territorioSeleccionado.id, composicion);
         estadoJuego = nuevoEstado;
         territorioSeleccionado = estadoJuego.territorios.find(t => t.id === territorioSeleccionado.id);
         
         if (territorioSeleccionado) {
-            document.getElementById('panel-subtitulo').textContent = 
-                `Perteneciente a ${territorioSeleccionado.pais_duenio_nombre} (${territorioSeleccionado.tropas_actuales} tropas)`;
+            actualizarSubtituloPanel(territorioSeleccionado);
         }
         
         dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
@@ -204,20 +218,20 @@ async function procesarMovimiento(territorioDestino) {
         return;
     }
 
-    const cantidadStr = prompt(`¿Cuántas tropas querés mover de ${territorioOrigenMover.nombre || 'origen'} a ${territorioDestino.nombre || 'destino'}?`);
-    if (!cantidadStr || cantidadStr.trim() === '') {
+    const composicion = await solicitarComposicionPorPrompt({
+        titulo: `Mover tropas: ${territorioOrigenMover.nombre || 'origen'} -> ${territorioDestino.nombre || 'destino'}`,
+        opciones: obtenerOpcionesDesdeTerritorio(territorioOrigenMover),
+        maximoTotal: territorioOrigenMover.tropas_actuales - 1,
+        presupuestoMaximo: null
+    });
+
+    if (!composicion) {
         deseleccionarTerritorio();
         return;
     }
 
-    const cantidad = parseInt(cantidadStr, 10);
-    if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
-        alert("Cantidad inválida. Recordá que debés dejar al menos 1 tropa en el territorio de origen.");
-        return;
-    }
-
     try {
-        estadoJuego = await apiMoverTropas(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
+        estadoJuego = await apiMoverTropas(partidaId, territorioOrigenMover.id, territorioDestino.id, composicion);
         dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
         actualizarInfoTurno();
         deseleccionarTerritorio(); 
@@ -242,21 +256,20 @@ async function procesarAtaque(territorioDestino) {
         return;
     }
 
-    const cantidadStr = prompt(`¿Cuántas tropas querés movilizar para atacar ${territorioDestino.nombre || 'destino'}?`);
-    if (!cantidadStr || cantidadStr.trim() === '') {
-        deseleccionarTerritorio();
-        return;
-    }
+    const composicion = await solicitarComposicionPorPrompt({
+        titulo: `Atacar: ${territorioOrigenMover.nombre || 'origen'} -> ${territorioDestino.nombre || 'destino'}`,
+        opciones: obtenerOpcionesDesdeTerritorio(territorioOrigenMover),
+        maximoTotal: territorioOrigenMover.tropas_actuales - 1,
+        presupuestoMaximo: null
+    });
 
-    const cantidad = parseInt(cantidadStr, 10);
-    if (isNaN(cantidad) || cantidad <= 0 || cantidad >= territorioOrigenMover.tropas_actuales) {
-        alert("Cantidad inválida. Recordá que debés dejar al menos 1 tropa en el territorio de origen.");
+    if (!composicion) {
         deseleccionarTerritorio();
         return;
     }
 
     try {
-        const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestino.id, cantidad);
+        const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestino.id, composicion);
         estadoJuego = resultadoAtaque.estado;
         
         const res = resultadoAtaque.combatResult;
@@ -323,11 +336,17 @@ function mostrarModalVictoria(nombreGanador) {
 
 function actualizarInfoTurno() {
     const info = document.getElementById('turno-actual-info');
+    const presupuestoInfo = document.getElementById('presupuesto-info');
     if (info && estadoJuego && estadoJuego.partida && estadoJuego.paises) {
         const paisActivo = estadoJuego.paises.find(p => p.pais_id === estadoJuego.partida.turno_actual || p.id === estadoJuego.partida.turno_actual);
         const nombrePais = paisActivo ? (paisActivo.nombre || paisActivo.pais_nombre) : `País #${estadoJuego.partida.turno_actual}`;
         const movsUsados = estadoJuego.partida?.movimientos_realizados || 0;
         info.innerHTML = `Turno de: <strong>${nombrePais}</strong><br><span style="font-size:11px; opacity:0.9;">Acciones del turno: ${movsUsados}/2</span>`;
+
+        if (presupuestoInfo) {
+            const presupuesto = calcularPuntosEconomia(paisActivo?.economia || 1);
+            presupuestoInfo.textContent = `Presupuesto de fortificación: ${presupuesto} pts`;
+        }
     }
 }
 
@@ -391,29 +410,29 @@ async function cargarYRenderizarMapa(partidaId) {
     }
 }
 
-async function apiReforzarTerritorio(idPartida, territorioId) {
+async function apiReforzarTerritorio(idPartida, territorioId, composicion) {
     const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/desplegar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ territorio_id: territorioId })
+        body: JSON.stringify({ territorio_id: territorioId, composicion })
     });
     return procesarRespuestaApi(respuesta);
 }
 
-async function apiMoverTropas(idPartida, origenId, destinoId, cantidad) {
+async function apiMoverTropas(idPartida, origenId, destinoId, composicion) {
     const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/mover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas: cantidad })
+        body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, composicion })
     });
     return procesarRespuestaApi(respuesta);
 }
 
-async function apiAtacar(idPartida, origenId, destinoId, cantidad) {
+async function apiAtacar(idPartida, origenId, destinoId, composicionAtacante) {
     const respuesta = await fetch(`${API_BASE}/api/partidas/${idPartida}/atacar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas_atacantes: cantidad })
+        body: JSON.stringify({ origen_id: origenId, destino_id: destinoId, tropas_atacantes: composicionAtacante })
     });
     return procesarRespuestaApi(respuesta);
 }
@@ -554,7 +573,9 @@ function dibujarGrafo(territorios, fronteras) {
             circulo.setAttribute("r", "43");
             tooltip.innerHTML = `
                 <strong>País: ${territorio.pais_duenio_nombre || 'Neutral'}</strong><br>
-                Tipo: ${territorio.tipo_terreno_nombre}
+                Tipo: ${territorio.tipo_terreno_nombre}<br>
+                Tropas: ${territorio.tropas_actuales}<br>
+                Composición: ${formatearComposicion(territorio.composicion_tropas)}
             `;
             tooltip.classList.remove("hidden");
         });
@@ -574,4 +595,195 @@ function dibujarGrafo(territorios, fronteras) {
         grupo.appendChild(textoTropas);
         svg.appendChild(grupo);
     });
+}
+
+function formatearComposicion(composicion) {
+    if (!Array.isArray(composicion) || composicion.length === 0) {
+        return "Sin tropas";
+    }
+
+    return composicion
+        .filter((item) => Number.isInteger(item?.cantidad) && item.cantidad > 0)
+        .map((item) => `${item.tipo || `Tipo #${item.id_tipo_tropa}`}: ${item.cantidad}`)
+        .join(", ");
+}
+
+function actualizarSubtituloPanel(territorio) {
+    const subtitulo = document.getElementById('panel-subtitulo');
+    if (!subtitulo || !territorio) return;
+
+    subtitulo.innerHTML = `Perteneciente a ${territorio.pais_duenio_nombre} (${territorio.tropas_actuales} tropas)<br><span style="font-size:11px; opacity:0.9;">${formatearComposicion(territorio.composicion_tropas)}</span>`;
+}
+
+function obtenerOpcionesDesdeTerritorio(territorio) {
+    const composicion = Array.isArray(territorio?.composicion_tropas) ? territorio.composicion_tropas : [];
+    return composicion
+        .filter((item) => Number.isInteger(item?.id_tipo_tropa) && Number.isInteger(item?.cantidad) && item.cantidad > 0)
+        .map((item) => ({
+            id_tipo_tropa: item.id_tipo_tropa,
+            tipo: item.tipo || `Tipo #${item.id_tipo_tropa}`,
+            dado_min: item.dado_min,
+            dado_max: item.dado_max,
+            costo: item.costo,
+            disponibles: item.cantidad
+        }));
+}
+
+async function obtenerOpcionesRefuerzo() {
+    if (!catalogoTropas.length) {
+        catalogoTropas = await obtenerCatalogoTropas();
+    }
+
+    return catalogoTropas
+        .filter((item) => Number.isInteger(item?.id))
+        .map((item) => ({
+            id_tipo_tropa: item.id,
+            tipo: item.tipo || `Tipo #${item.id}`,
+            dado_min: item.dado_min,
+            dado_max: item.dado_max,
+            costo: item.costo,
+            disponibles: null
+        }));
+}
+
+async function obtenerCatalogoTropas() {
+    const respuesta = await fetch(`${API_BASE}/api/tipos-tropas`);
+    return procesarRespuestaApi(respuesta);
+}
+
+function calcularPuntosEconomia(economia) {
+    const valor = Number(economia);
+    if (!Number.isFinite(valor) || valor <= 1) return 1;
+    if (valor <= 3) return 2;
+    if (valor <= 5) return 3;
+    if (valor <= 7) return 4;
+    if (valor <= 9) return 5;
+    return 6;
+}
+
+function obtenerPresupuestoFortificacion() {
+    const turnoActual = estadoJuego?.partida?.turno_actual;
+    const paisActivo = estadoJuego?.paises?.find((p) => (p.pais_id === turnoActual || p.id === turnoActual));
+    return calcularPuntosEconomia(paisActivo?.economia || 1);
+}
+
+function armarMensajeComposicion(titulo, opciones, maximoTotal, presupuestoMaximo) {
+    const encabezado = [titulo, ""];
+    const detalle = opciones.map((item) => {
+        const disponiblesTxt = Number.isInteger(item.disponibles) ? ` | disponibles: ${item.disponibles}` : "";
+        const dadosTxt = Number.isInteger(item.dado_min) && Number.isInteger(item.dado_max)
+            ? ` | dado: ${item.dado_min}-${item.dado_max}`
+            : "";
+        const costoTxt = Number.isInteger(item.costo) ? ` | costo: ${item.costo}` : "";
+        return `- ${item.id_tipo_tropa}: ${item.tipo}${disponiblesTxt}${dadosTxt}${costoTxt}`;
+    });
+
+    const reglas = [
+        "",
+        `Formato: ${FORMATO_COMPOSICION_EJEMPLO}`,
+        "Ingresá pares id:cantidad separados por coma."
+    ];
+
+    if (Number.isInteger(maximoTotal)) {
+        reglas.push(`Máximo total permitido: ${maximoTotal} tropas.`);
+    }
+    if (Number.isInteger(presupuestoMaximo)) {
+        reglas.push(`Presupuesto máximo: ${presupuestoMaximo} pts.`);
+    }
+
+    return [...encabezado, ...detalle, ...reglas].join("\n");
+}
+
+function parsearComposicionIngresada(input, opciones) {
+    const disponiblesPorId = new Map(opciones.map((item) => [item.id_tipo_tropa, item]));
+    const acumulado = new Map();
+    const pares = input.split(",").map((item) => item.trim()).filter(Boolean);
+
+    if (!pares.length) {
+        throw new Error("No ingresaste ninguna tropa.");
+    }
+
+    for (const par of pares) {
+        const [idRaw, cantidadRaw] = par.split(":").map((x) => x && x.trim());
+        const id = Number(idRaw);
+        const cantidad = Number(cantidadRaw);
+
+        if (!Number.isInteger(id) || !Number.isInteger(cantidad) || cantidad <= 0) {
+            throw new Error(`Formato inválido en '${par}'. Debe ser id:cantidad.`);
+        }
+        if (!disponiblesPorId.has(id)) {
+            throw new Error(`El tipo de tropa ${id} no existe en esta acción.`);
+        }
+
+        acumulado.set(id, (acumulado.get(id) || 0) + cantidad);
+    }
+
+    const composicion = Array.from(acumulado.entries())
+        .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
+
+    for (const item of composicion) {
+        const opcion = disponiblesPorId.get(item.id_tipo_tropa);
+        if (Number.isInteger(opcion.disponibles) && item.cantidad > opcion.disponibles) {
+            throw new Error(`No hay suficientes ${opcion.tipo}. Máximo disponible: ${opcion.disponibles}.`);
+        }
+    }
+
+    return composicion;
+}
+
+function calcularCostoComposicion(composicion, opciones) {
+    const costos = new Map(opciones.map((item) => [item.id_tipo_tropa, Number.isInteger(item.costo) ? item.costo : 1]));
+    return composicion.reduce((acc, item) => acc + ((costos.get(item.id_tipo_tropa) || 1) * item.cantidad), 0);
+}
+
+function totalComposicion(composicion) {
+    return composicion.reduce((sum, item) => sum + item.cantidad, 0);
+}
+
+async function solicitarComposicionPorPrompt({ titulo, opciones, maximoTotal, presupuestoMaximo }) {
+    if (!opciones.length) {
+        alert("No hay tipos de tropas disponibles para esta acción.");
+        return null;
+    }
+
+    const mensaje = armarMensajeComposicion(titulo, opciones, maximoTotal, presupuestoMaximo);
+    const ingreso = prompt(mensaje);
+    if (!ingreso || !ingreso.trim()) {
+        return null;
+    }
+
+    let composicion;
+    try {
+        composicion = parsearComposicionIngresada(ingreso.trim(), opciones);
+    } catch (error) {
+        alert(error.message);
+        return null;
+    }
+
+    const total = totalComposicion(composicion);
+    if (total <= 0) {
+        alert("Debés indicar al menos una tropa.");
+        return null;
+    }
+
+    if (Number.isInteger(maximoTotal) && total > maximoTotal) {
+        alert(`Excediste el máximo permitido (${maximoTotal} tropas).`);
+        return null;
+    }
+
+    if (Number.isInteger(presupuestoMaximo)) {
+        const costo = calcularCostoComposicion(composicion, opciones);
+        if (costo > presupuestoMaximo) {
+            alert(`La composición cuesta ${costo} pts y supera el presupuesto de ${presupuestoMaximo} pts.`);
+            return null;
+        }
+    }
+
+    return composicion;
+}
+
+function manejarSalirAlMenu() {
+    const confirmar = confirm("¿Seguro que querés salir al menú principal? Se perderá la vista actual de la partida.");
+    if (!confirmar) return;
+    window.location.href = "index.html";
 }
