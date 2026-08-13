@@ -31,9 +31,9 @@
                     <select name="color_hex" class="w-full rounded px-3 py-2 bg-slate-800" required>
                         <option value="" disabled selected>Seleccionar color...</option>
                     </select>
-                    <input name="economia" type="number" placeholder="Economía" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                    <input name="tecnologia" type="number" placeholder="Tecnología" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                    <input name="agresividad" type="number" placeholder="Agresividad" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="economia" type="number" min="1" max="10" step="1" placeholder="Economía (1 a 10)" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="tecnologia" type="number" min="1" max="10" step="1" placeholder="Tecnología (1 a 10)" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="agresividad" type="number" min="1" max="10" step="1" placeholder="Agresividad (1 a 10)" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <select name="terreno_id" class="w-full rounded px-3 py-2 bg-slate-800"></select>
                     <div class="flex gap-2">
                         <button type="submit" class="bg-red-700 px-3 py-2 rounded cursor-pointer">Guardar</button>
@@ -52,9 +52,9 @@
                     <input type="hidden" name="id">
                     <input name="tipo" placeholder="Tipo" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <input name="descripcion" placeholder="Descripción" class="w-full rounded px-3 py-2 bg-slate-800">
-                    <input name="dado_min" type="number" placeholder="Dado mínimo" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                    <input name="dado_max" type="number" placeholder="Dado máximo" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                    <input name="costo" type="number" placeholder="Costo" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="dado_min" type="number" min="1" max="99" step="1" placeholder="Dado mínimo (1 a 99)" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="dado_max" type="number" min="1" max="99" step="1" placeholder="Dado máximo (1 a 99)" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="costo" type="number" min="1" max="99" step="1" placeholder="Costo (1 a 99)" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <div class="flex gap-2">
                         <button type="submit" class="bg-red-700 px-3 py-2 rounded cursor-pointer">Guardar</button>
                         <button type="button" data-action="cancel" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
@@ -75,8 +75,8 @@
                     <select name="color_hex" class="w-full rounded px-3 py-2 bg-slate-800" required>
                         <option value="" disabled selected>Seleccionar color...</option>
                     </select>
-                    <input name="modificador_ataque" type="number" step="0.1" placeholder="Modificador ataque" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                    <input name="modificador_defensa" type="number" step="0.1" placeholder="Modificador defensa" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="modificador_ataque" type="number" min="0.50" max="1.50" step="0.01" placeholder="Modificador ataque (0,50 a 1,50)" class="w-full rounded px-3 py-2 bg-slate-800" required>
+                    <input name="modificador_defensa" type="number" min="0.50" max="1.50" step="0.01" placeholder="Modificador defensa (0,50 a 1,50)" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <div class="flex gap-2">
                         <button type="submit" class="bg-red-700 px-3 py-2 rounded cursor-pointer">Guardar</button>
                         <button type="button" data-action="cancel" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
