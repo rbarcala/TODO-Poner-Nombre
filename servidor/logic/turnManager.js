@@ -228,8 +228,16 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
             ? buildTroopListFromComposition(fallbackDefenderComposition, troopTypesCatalog || [])
             : Array(target.tropas_actuales || 1).fill(defaultTroop);
 
+        const defenderCountry = participatingCountries.find(
+            (p) => (p.pais_id || p.id) === target.pais_duenio_id
+        );
         const attackerObj = { id: botId, resistencia_terreno_id: botCountry.resistencia_terreno_id };
-        const defenderObj = target.pais_duenio_id ? { id: target.pais_duenio_id } : null;
+        const defenderObj = target.pais_duenio_id ? {
+            id: target.pais_duenio_id,
+            resistencia_terreno_id: Number.isInteger(defenderCountry?.resistencia_terreno_id)
+                ? defenderCountry.resistencia_terreno_id
+                : null
+        } : null;
         
         const terrainObj = { 
             id: target.tipo_terreno_id, 

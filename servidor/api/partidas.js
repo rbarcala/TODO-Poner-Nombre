@@ -395,8 +395,20 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
     ? buildTroopListFromComposition(composicionDestino, catalogTropas || [])
     : buildTroopList(destino.tropas_actuales || 1, catalogTropas || []);
 
-  const attackerObj = { id: activePlayerId, resistencia_terreno_id: null };
-  const defenderObj = destino.pais_duenio_id ? { id: destino.pais_duenio_id } : null;
+  const attackerState = estado.paises.find((p) => (p.pais_id || p.id) === activePlayerId);
+  const defenderState = estado.paises.find((p) => (p.pais_id || p.id) === destino.pais_duenio_id);
+  const attackerObj = {
+    id: activePlayerId,
+    resistencia_terreno_id: Number.isInteger(attackerState?.resistencia_terreno_id)
+      ? attackerState.resistencia_terreno_id
+      : null
+  };
+  const defenderObj = destino.pais_duenio_id ? {
+    id: destino.pais_duenio_id,
+    resistencia_terreno_id: Number.isInteger(defenderState?.resistencia_terreno_id)
+      ? defenderState.resistencia_terreno_id
+      : null
+  } : null;
   const terrainObj = { 
     id: destino.tipo_terreno_id, 
     modificador_ataque: destino.modificador_ataque || 1.0, 

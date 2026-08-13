@@ -200,13 +200,38 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
         dado_resultado: u.dado_resultado
     }));
 
+    const toPositiveNumber = (value, fallback = 1) => {
+        const num = Number(value);
+        if (!Number.isFinite(num) || num <= 0) return fallback;
+        return num;
+    };
+
+    const hasTerrainResistance = (countryObj, terrainObj) =>
+        Number.isInteger(countryObj?.resistencia_terreno_id) &&
+        Number.isInteger(terrainObj?.id) &&
+        countryObj.resistencia_terreno_id === terrainObj.id;
+
+    const resolveModifier = (baseModifier, hasResistance) => {
+        const normalizedBase = toPositiveNumber(baseModifier, 1);
+        if (!hasResistance) return normalizedBase;
+        return Math.max(1, normalizedBase);
+    };
+
+    const roundScore = (value) => Math.max(0, Math.round(value * 100) / 100);
+
     const preparedAttackers = attackingTroops.map(normalizeUnit).map(withRoll);
     const preparedDefenders = (defendingTroops || []).map(normalizeUnit).map(withRoll);
 
     const attackRolls = preparedAttackers.map((u) => u.dado_resultado);
     const defenseRolls = preparedDefenders.map((u) => u.dado_resultado);
-    const totalAttack = attackRolls.reduce((sum, val) => sum + val, 0);
-    const totalDefense = defenseRolls.reduce((sum, val) => sum + val, 0);
+    const totalAttackBase = attackRolls.reduce((sum, val) => sum + val, 0);
+    const totalDefenseBase = defenseRolls.reduce((sum, val) => sum + val, 0);
+    const attackerHasResistance = hasTerrainResistance(attackerCountry, terrain);
+    const defenderHasResistance = hasTerrainResistance(defenderCountry, terrain);
+    const modAttackUsed = resolveModifier(terrain?.modificador_ataque, attackerHasResistance);
+    const modDefenseUsed = resolveModifier(terrain?.modificador_defensa, defenderHasResistance);
+    const totalAttack = roundScore(totalAttackBase * modAttackUsed);
+    const totalDefense = roundScore(totalDefenseBase * modDefenseUsed);
 
     const autoConquest = preparedDefenders.length === 0;
     const attackerWins = autoConquest || totalAttack > totalDefense;
@@ -264,11 +289,11 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
         defenderSurvivorComposition: summarizeTroopsByType(defenderSurvivorUnits),
         attackerEliminatedComposition: summarizeTroopsByType(attackerEliminatedUnits),
         defenderEliminatedComposition: summarizeTroopsByType(defenderEliminatedUnits),
-        modAttackUsed: 1.0,
-        modDefenseUsed: 1.0,
-        attackerHasResistance: false,
-        defenderHasResistance: false,
-        totalAttackBase: totalAttack,
-        totalDefenseBase: totalDefense
+        modAttackUsed,
+        modDefenseUsed,
+        attackerHasResistance,
+        defenderHasResistance,
+        totalAttackBase,
+        totalDefenseBase
     };
 }
