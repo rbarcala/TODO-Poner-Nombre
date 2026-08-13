@@ -32,6 +32,7 @@ CREATE TABLE "paises_partidas"(
     "partida_id" INTEGER NOT NULL REFERENCES "partidas"("id"),
     "tropas_actuales" INTEGER NOT NULL,
     "eliminado" BOOLEAN NULL DEFAULT FALSE,
+    "presupuesto_fortificacion" INTEGER NOT NULL DEFAULT 0,
     UNIQUE("partida_id", "pais_id")
 );
 

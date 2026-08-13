@@ -72,9 +72,13 @@
         <div>
             <h2 class="font-bold text-xl text-red-500">Partida en Curso</h2>
             <p id="turno-actual-info" class="panel-muted text-sm font-semibold mt-1">Turno de: cargando...</p>
+            <p id="presupuesto-info" class="panel-muted text-xs mt-1">Presupuesto de fortificación: --</p>
         </div>
         <button id="btn-pasar-turno" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded shadow transition-all active:scale-95 text-sm cursor-pointer flex items-center justify-center gap-1">
             ⏩ Pasar Turno (IA)
+        </button>
+        <button id="btn-salir" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-3 rounded shadow transition-all active:scale-95 text-sm cursor-pointer">
+            🚪 Salir al menú
         </button>
     </div>
 
@@ -122,6 +126,46 @@
         </div>
     </div>
 
+    <div id="modal-refuerzo" style="position: fixed; inset: 0; z-index: 20000; pointer-events: auto;" class="fixed inset-0 z-[10001] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm">
+        <div class="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900/95 p-5 shadow-2xl space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 id="refuerzo-titulo" class="text-xl font-bold text-pink-400">Reforzar territorio</h3>
+                    <p id="refuerzo-subtitulo" class="text-sm text-slate-300 mt-1">Seleccioná las tropas a comprar.</p>
+                    <p id="refuerzo-presupuesto" class="text-sm text-emerald-300 mt-1">Presupuesto disponible: 0 pts</p>
+                </div>
+                <button id="btn-cerrar-refuerzo" class="rounded bg-slate-700 px-3 py-1 text-sm font-semibold hover:bg-slate-600">Cerrar</button>
+            </div>
+
+            <div id="refuerzo-lista" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+            <div class="flex items-center justify-between border-t border-slate-700 pt-3">
+                <p id="refuerzo-resumen" class="text-sm text-slate-300">Seleccionado: 0 tropas | Costo: 0 pts</p>
+                <button id="btn-confirmar-refuerzo" class="rounded bg-pink-600 px-4 py-2 text-sm font-bold text-white hover:bg-pink-500">Confirmar compra</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-ataque" style="position: fixed; inset: 0; z-index: 20000; pointer-events: auto;" class="fixed inset-0 z-[10001] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm">
+        <div class="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900/95 p-5 shadow-2xl space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 id="ataque-titulo" class="text-xl font-bold text-red-400">Atacar territorio</h3>
+                    <p id="ataque-subtitulo" class="text-sm text-slate-300 mt-1">Seleccioná las tropas para atacar.</p>
+                    <p id="ataque-limite" class="text-sm text-amber-300 mt-1">Máximo a enviar: 0 tropas</p>
+                </div>
+                <button id="btn-cerrar-ataque" class="rounded bg-slate-700 px-3 py-1 text-sm font-semibold hover:bg-slate-600">Cerrar</button>
+            </div>
+
+            <div id="ataque-lista" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+            <div class="flex items-center justify-between border-t border-slate-700 pt-3">
+                <p id="ataque-resumen" class="text-sm text-slate-300">Seleccionado: 0 tropas</p>
+                <button id="btn-confirmar-ataque" class="rounded bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500">Confirmar ataque</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal de Victoria y Fin de Partida -->
     <div id="modal-victoria" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md">
         <div class="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900/95 p-8 text-center shadow-2xl space-y-6">
@@ -135,6 +179,16 @@
                     🏠 Volver al Menú Principal
                 </a>
             </div>
+        </div>
+    </div>
+
+    <div id="modal-bot-resumen" style="position: fixed; inset: 0; z-index: 21000; pointer-events: auto;" class="fixed inset-0 z-[10002] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm">
+        <div class="w-full max-w-5xl rounded-xl border border-slate-700 bg-slate-900/95 p-5 shadow-2xl space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <h3 id="bot-resumen-titulo" class="text-xl font-bold text-cyan-300">Turno de bot</h3>
+                <button id="btn-cerrar-bot-resumen" class="rounded bg-slate-700 px-3 py-1 text-sm font-semibold hover:bg-slate-600">Cerrar</button>
+            </div>
+            <pre id="bot-resumen-contenido" class="max-h-[70vh] overflow-y-auto whitespace-pre-wrap rounded border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100"></pre>
         </div>
     </div>
 

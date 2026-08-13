@@ -1,31 +1,112 @@
 import { pool } from '../pool.js';
 
-const obtenerTropaBase = async (client) => {
+const normalizarEnteroPositivo = (valor) => {
+    const numero = Number(valor);
+    return Number.isInteger(numero) && numero > 0 ? numero : 0;
+};
+
+const obtenerTipoInfanteriaId = async (client, troopTypesCatalog = []) => {
+    const desdeCatalogo = (troopTypesCatalog || []).find((tipo) => (
+        Number.isInteger(tipo?.id)
+        && tipo.id > 0
+        && typeof tipo?.tipo === 'string'
+        && tipo.tipo.trim().toLowerCase() === 'infanteria'
+    ));
+
+    if (desdeCatalogo) return desdeCatalogo.id;
+
+    const resultado = await client.query(`
+        SELECT id
+        FROM tipos_de_tropas
+        WHERE LOWER(TRIM(tipo)) = 'infanteria'
+        LIMIT 1
+    `);
+
+    const idInfanteria = resultado.rows[0]?.id;
+    if (!idInfanteria) {
+        throw new Error('No existe el tipo de tropa "Infanteria" en el catálogo. No se puede inicializar la partida.');
+    }
+
+    return idInfanteria;
+};
+
+const obtenerTipoBaseId = async (client, troopTypesCatalog = []) => {
+    const primerTipoCatalogo = (troopTypesCatalog || []).find((tipo) => Number.isInteger(tipo?.id) && tipo.id > 0);
+    if (primerTipoCatalogo) return primerTipoCatalogo.id;
+
+    const resultado = await client.query('SELECT id FROM tipos_de_tropas ORDER BY id ASC LIMIT 1');
+    return resultado.rows[0]?.id;
+};
+
+const asegurarTropaPorTipo = async (client, idTipoTropa) => {
     const resultado = await client.query(`
         INSERT INTO tropas (id_tipo_tropa)
-        SELECT id FROM tipos_de_tropas ORDER BY id ASC LIMIT 1
+        VALUES ($1)
         ON CONFLICT (id_tipo_tropa)
         DO UPDATE SET id_tipo_tropa = EXCLUDED.id_tipo_tropa
         RETURNING id
-    `);
+    `, [idTipoTropa]);
 
     return resultado.rows[0]?.id;
 };
 
-const guardarTropasEstacionadas = async (client, territorioId, cantidad) => {
-    await client.query('DELETE FROM tropas_estacionadas WHERE id_territorio = $1', [territorioId]);
+const normalizarComposicionTropas = async (client, tropasEntrada, troopTypesCatalog = []) => {
+    const acumulado = new Map();
+    const agregar = (idTipoTropa, cantidad) => {
+        const idNormalizado = normalizarEnteroPositivo(idTipoTropa);
+        const cantidadNormalizada = normalizarEnteroPositivo(cantidad);
+        if (idNormalizado <= 0 || cantidadNormalizada <= 0) return;
+        acumulado.set(idNormalizado, (acumulado.get(idNormalizado) || 0) + cantidadNormalizada);
+    };
 
-    if (cantidad <= 0) return;
-
-    const tropaId = await obtenerTropaBase(client);
-    if (!tropaId) {
-        throw new Error('No hay tipos de tropas disponibles para asignar al territorio');
+    if (Array.isArray(tropasEntrada)) {
+        tropasEntrada.forEach((item) => {
+            agregar(item?.id_tipo_tropa, item?.cantidad);
+        });
+    } else if (tropasEntrada && typeof tropasEntrada === 'object') {
+        Object.entries(tropasEntrada).forEach(([idTipoTropa, cantidad]) => {
+            agregar(idTipoTropa, cantidad);
+        });
+    } else {
+        const cantidad = normalizarEnteroPositivo(tropasEntrada);
+        if (cantidad > 0) {
+            const tipoBaseId = await obtenerTipoBaseId(client, troopTypesCatalog);
+            if (!tipoBaseId) {
+                throw new Error('No hay tipos de tropas disponibles para asignar al territorio');
+            }
+            agregar(tipoBaseId, cantidad);
+        }
     }
 
-    await client.query(`
-        INSERT INTO tropas_estacionadas (id_territorio, id_tropa)
-        SELECT $1, $2 FROM generate_series(1, $3)
-    `, [territorioId, tropaId, cantidad]);
+    return Array.from(acumulado.entries())
+        .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }))
+        .sort((a, b) => a.id_tipo_tropa - b.id_tipo_tropa);
+};
+
+const guardarTropasEstacionadas = async (client, territorioId, tropasEntrada, troopTypesCatalog = []) => {
+    await client.query('DELETE FROM tropas_estacionadas WHERE id_territorio = $1', [territorioId]);
+
+    const composicion = await normalizarComposicionTropas(client, tropasEntrada, troopTypesCatalog);
+    if (composicion.length === 0) return;
+
+    const cacheTropaPorTipo = new Map();
+    for (const item of composicion) {
+        const idTipoTropa = item.id_tipo_tropa;
+        let tropaId = cacheTropaPorTipo.get(idTipoTropa);
+
+        if (!tropaId) {
+            tropaId = await asegurarTropaPorTipo(client, idTipoTropa);
+            if (!tropaId) {
+                throw new Error(`No se pudo obtener la tropa para el tipo ${idTipoTropa}`);
+            }
+            cacheTropaPorTipo.set(idTipoTropa, tropaId);
+        }
+
+        await client.query(`
+            INSERT INTO tropas_estacionadas (id_territorio, id_tropa)
+            SELECT $1, $2 FROM generate_series(1, $3)
+        `, [territorioId, tropaId, item.cantidad]);
+    }
 };
 
 export const obtenerPartidas = async () => {
@@ -53,10 +134,12 @@ export const obtenerPartida = async (id) => {
     }
 };
 
-export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGenerado) => {
+export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGenerado, troopTypesCatalog = []) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        await client.query('ALTER TABLE paises_partidas ADD COLUMN IF NOT EXISTS presupuesto_fortificacion INTEGER DEFAULT 0;');
+        const idTipoInfanteria = await obtenerTipoInfanteriaId(client, troopTypesCatalog);
 
         const primerPaisId = paisesParticipantesIds[0];
         
@@ -70,7 +153,8 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
         // 2. Asociar países a la partida
         for (const paisId of paisesParticipantesIds) {
             await client.query(
-                `INSERT INTO paises_partidas (pais_id, partida_id, tropas_actuales, eliminado) VALUES ($1, $2, $3, false)`,
+                `INSERT INTO paises_partidas (pais_id, partida_id, tropas_actuales, eliminado, presupuesto_fortificacion)
+                 VALUES ($1, $2, $3, false, 0)`,
                 [paisId, partida.id, 0]
             );
         }
@@ -86,7 +170,13 @@ export const crearPartidaConMapa = async (nombre, paisesParticipantesIds, mapaGe
                 [partida.id, t.nombre || `Sector (${t.x},${t.y})`, t.x, t.y, t.tipo_terreno_id, t.pais_duenio_id]
             );
             const territorioGuardado = resTerritorio.rows[0];
-            await guardarTropasEstacionadas(client, territorioGuardado.id, t.tropas_actuales ?? 3);
+            const cantidadInicialInfanteria = t.pais_duenio_id ? 3 : 1;
+            await guardarTropasEstacionadas(
+                client,
+                territorioGuardado.id,
+                [{ id_tipo_tropa: idTipoInfanteria, cantidad: cantidadInicialInfanteria }],
+                troopTypesCatalog
+            );
             idMap.set(t.id, territorioGuardado.id);
         }
 
@@ -129,16 +219,49 @@ export const obtenerEstadoCompletoPartida = async (partidaId) => {
         `, [partidaId]);
 
         const resTerritorios = await pool.query(`
-            SELECT t.*, tt.nombre as tipo_terreno_nombre, tt.color_hex as terreno_color,
-                   tt.modificador_ataque, tt.modificador_defensa,
-                   p.nombre as pais_duenio_nombre, p.color_hex as pais_duenio_color,
-                   GREATEST(COUNT(te.id_tropa)::integer, 1) as tropas_actuales
+            WITH composicion AS (
+                SELECT
+                    te.id_territorio,
+                    tr.id_tipo_tropa,
+                    tdt.tipo AS tipo_tropa,
+                    tdt.dado_min,
+                    tdt.dado_max,
+                    tdt.costo,
+                    COUNT(*)::integer AS cantidad
+                FROM tropas_estacionadas te
+                JOIN tropas tr ON tr.id = te.id_tropa
+                JOIN tipos_de_tropas tdt ON tdt.id = tr.id_tipo_tropa
+                GROUP BY te.id_territorio, tr.id_tipo_tropa, tdt.tipo, tdt.dado_min, tdt.dado_max, tdt.costo
+            )
+            SELECT
+                t.*,
+                terr.nombre as tipo_terreno_nombre,
+                terr.color_hex as terreno_color,
+                terr.modificador_ataque,
+                terr.modificador_defensa,
+                p.nombre as pais_duenio_nombre,
+                p.color_hex as pais_duenio_color,
+                COALESCE(SUM(comp.cantidad), 0)::integer as tropas_actuales,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id_tipo_tropa', comp.id_tipo_tropa,
+                            'tipo', comp.tipo_tropa,
+                            'dado_min', comp.dado_min,
+                            'dado_max', comp.dado_max,
+                            'costo', comp.costo,
+                            'cantidad', comp.cantidad
+                        )
+                        ORDER BY comp.id_tipo_tropa
+                    ) FILTER (WHERE comp.id_tipo_tropa IS NOT NULL),
+                    '[]'::json
+                ) as composicion_tropas
             FROM territorios t
-            LEFT JOIN tipos_de_terreno tt ON t.tipo_terreno_id = tt.id
+            LEFT JOIN tipos_de_terreno terr ON t.tipo_terreno_id = terr.id
             LEFT JOIN paises p ON t.pais_duenio_id = p.id
-            LEFT JOIN tropas_estacionadas te ON t.id = te.id_territorio
+            LEFT JOIN composicion comp ON comp.id_territorio = t.id
             WHERE t.partida_id = $1
-            GROUP BY t.id, tt.id, p.id
+            GROUP BY t.id, terr.id, p.id
             ORDER BY t.id ASC
         `, [partidaId]);
 
@@ -192,16 +315,34 @@ export const actualizarTerritorio = async (territorioId, paisDuenioId, tropasAct
     }
 };
 
-export const asegurarColumnaMovimientos = async () => {
+export const asegurarColumnasPartida = async () => {
     try {
         await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS movimientos_realizados INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE partidas ADD COLUMN IF NOT EXISTS ha_fortificado BOOLEAN DEFAULT FALSE;');
+        await pool.query('ALTER TABLE paises_partidas ADD COLUMN IF NOT EXISTS presupuesto_fortificacion INTEGER DEFAULT 0;');
     } catch (e) {
-        // Ignorar si ya existe
+        // Ignorar si ya existen
+    }
+};
+
+// Alias para compatibilidad con llamadas existentes
+export const asegurarColumnaMovimientos = asegurarColumnasPartida;
+
+export const marcarFortificacionRealizada = async (partidaId) => {
+    await asegurarColumnasPartida();
+    try {
+        const res = await pool.query(
+            'UPDATE partidas SET ha_fortificado = TRUE WHERE id = $1 RETURNING *',
+            [partidaId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
     }
 };
 
 export const incrementarMovimientosPartida = async (partidaId) => {
-    await asegurarColumnaMovimientos();
+    await asegurarColumnasPartida();
     try {
         const res = await pool.query(
             'UPDATE partidas SET movimientos_realizados = COALESCE(movimientos_realizados, 0) + 1 WHERE id = $1 RETURNING *',
@@ -214,10 +355,10 @@ export const incrementarMovimientosPartida = async (partidaId) => {
 };
 
 export const resetearMovimientosPartida = async (partidaId) => {
-    await asegurarColumnaMovimientos();
+    await asegurarColumnasPartida();
     try {
         const res = await pool.query(
-            'UPDATE partidas SET movimientos_realizados = 0 WHERE id = $1 RETURNING *',
+            'UPDATE partidas SET movimientos_realizados = 0, ha_fortificado = FALSE WHERE id = $1 RETURNING *',
             [partidaId]
         );
         return res.rows[0];
@@ -226,15 +367,56 @@ export const resetearMovimientosPartida = async (partidaId) => {
     }
 };
 
+export const otorgarPresupuestoFortificacion = async (partidaId, paisId, puntos) => {
+    await asegurarColumnasPartida();
+    const puntosEnteros = Number.isInteger(puntos) && puntos > 0 ? puntos : 0;
+    if (puntosEnteros <= 0) return undefined;
+
+    try {
+        const res = await pool.query(
+            `UPDATE paises_partidas
+             SET presupuesto_fortificacion = COALESCE(presupuesto_fortificacion, 0) + $1
+             WHERE partida_id = $2 AND pais_id = $3
+             RETURNING *`,
+            [puntosEnteros, partidaId, paisId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
+    }
+};
+
+export const gastarPresupuestoFortificacion = async (partidaId, paisId, costo) => {
+    await asegurarColumnasPartida();
+    const costoEntero = Number.isInteger(costo) && costo > 0 ? costo : 0;
+    if (costoEntero <= 0) return undefined;
+
+    try {
+        const res = await pool.query(
+            `UPDATE paises_partidas
+             SET presupuesto_fortificacion = COALESCE(presupuesto_fortificacion, 0) - $1
+             WHERE partida_id = $2
+               AND pais_id = $3
+               AND COALESCE(presupuesto_fortificacion, 0) >= $1
+             RETURNING *`,
+            [costoEntero, partidaId, paisId]
+        );
+        return res.rows[0];
+    } catch (e) {
+        return undefined;
+    }
+};
+
 export const actualizarEstadoPartida = async (partidaId, turnoActualPaisId, estado, paisGanadorId = null) => {
-    await asegurarColumnaMovimientos();
+    await asegurarColumnasPartida();
     try {
         const query = `
             UPDATE partidas 
             SET turno_actual = COALESCE($1, turno_actual), 
                 estado = COALESCE($2, estado), 
                 pais_ganador_id = COALESCE($3, pais_ganador_id),
-                movimientos_realizados = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN 0 ELSE movimientos_realizados END
+                movimientos_realizados = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN 0 ELSE movimientos_realizados END,
+                ha_fortificado = CASE WHEN $1 IS NOT NULL AND $1 <> turno_actual THEN FALSE ELSE ha_fortificado END
             WHERE id = $4 
             RETURNING *
         `;
