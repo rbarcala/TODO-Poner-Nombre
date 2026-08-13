@@ -486,7 +486,7 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
     return res.status(400).json({ error: "No hay un turno activo válido para avanzar." });
   }
 
-  const humanoPaisId = estado.paises[0]?.pais_id || estado.paises[0]?.id;
+  const humanoPaisId = estado.partida.turno_actual;
   const catalogTropas = await obtenerTiposTropas();
   const botLogs = [];
   let guardCounter = 0;
