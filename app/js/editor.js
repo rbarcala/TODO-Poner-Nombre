@@ -300,6 +300,34 @@ function setFieldValue(form, name, value) {
   }
 }
 
+function getValidationError(entity, data) {
+  if (entity === 'paises') {
+    const attributes = ['economia', 'tecnologia', 'agresividad'];
+    if (attributes.some((attribute) => !Number.isInteger(data[attribute]) || data[attribute] < 1 || data[attribute] > 10)) {
+      return 'Economía, tecnología y agresividad deben ser números enteros entre 1 y 10.';
+    }
+  }
+
+  if (entity === 'tropas') {
+    const attributes = ['dado_min', 'dado_max', 'costo'];
+    if (attributes.some((attribute) => !Number.isInteger(data[attribute]) || data[attribute] < 1 || data[attribute] > 99)) {
+      return 'Los dados y el costo deben ser números enteros entre 1 y 99.';
+    }
+    if (data.dado_max < data.dado_min) {
+      return 'El dado máximo no puede ser menor que el dado mínimo.';
+    }
+  }
+
+  if (entity === 'terrenos') {
+    const attributes = ['modificador_ataque', 'modificador_defensa'];
+    if (attributes.some((attribute) => !Number.isFinite(data[attribute]) || data[attribute] < 0.5 || data[attribute] > 1.5)) {
+      return 'Los modificadores de ataque y defensa deben estar entre 0,50 y 1,50.';
+    }
+  }
+
+  return null;
+}
+
 async function handleSubmit(form) {
   const formId = form.getAttribute('id') || '';
   const entity = formId.replace('form-', '');
@@ -327,10 +355,10 @@ async function handleSubmit(form) {
     normalized.tipo = payload.tipo ? payload.tipo.trim() : '';
     normalized.descripcion = payload.descripcion ? payload.descripcion.trim() : null;
     
-    // Parseo seguro de enteros para evitar enviar NaN o cadenas vacías
-    normalized.dado_min = payload.dado_min !== '' ? parseInt(payload.dado_min, 10) : 1;
-    normalized.dado_max = payload.dado_max !== '' ? parseInt(payload.dado_max, 10) : 6;
-    normalized.costo = payload.costo !== '' ? parseInt(payload.costo, 10) : 1;
+    // Conservamos decimales inválidos para que la validación de enteros los rechace.
+    normalized.dado_min = payload.dado_min !== '' ? Number(payload.dado_min) : 1;
+    normalized.dado_max = payload.dado_max !== '' ? Number(payload.dado_max) : 6;
+    normalized.costo = payload.costo !== '' ? Number(payload.costo) : 1;
   } else {
     if (payload.id) normalized.id = Number(payload.id);
     normalized.nombre = payload.nombre;
@@ -342,6 +370,12 @@ async function handleSubmit(form) {
 
   if ((entity === 'paises' || entity === 'terrenos') && !ALLOWED_COLORS.has(normalized.color_hex)) {
     alert('Debés elegir un color de la paleta disponible.');
+    return;
+  }
+
+  const validationError = getValidationError(entity, normalized);
+  if (validationError) {
+    alert(validationError);
     return;
   }
 
