@@ -54,6 +54,14 @@ const subtractCompositions = (base, remove) => {
   return fromCompositionMap(result);
 };
 
+const addCompositions = (base, add) => {
+  const result = toCompositionMap(base);
+  for (const [idTipo, cantidad] of toCompositionMap(add).entries()) {
+    result.set(idTipo, (result.get(idTipo) || 0) + cantidad);
+  }
+  return fromCompositionMap(result);
+};
+
 // GET /api/partidas - Listar partidas
 endpointsPartidas.get("/", async (req, res) => {
   const partidas = await obtenerPartidas();
@@ -209,9 +217,12 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
 });
 
 // POST /api/partidas/:id/mover - Mover tropas entre territorios propios
+// Body soportado:
+// - Legacy: { origen_id, destino_id, tropas: number }
+// - Composición: { origen_id, destino_id, composicion: [{ id_tipo_tropa, cantidad }] }
 endpointsPartidas.post("/:id/mover", async (req, res) => {
   const partidaId = parseInt(req.params.id);
-  const { origen_id, destino_id, tropas } = req.body;
+  const { origen_id, destino_id, tropas, composicion } = req.body;
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
@@ -224,8 +235,10 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
   const origen = estado.territorios.find(t => t.id === origen_id);
   const destino = estado.territorios.find(t => t.id === destino_id);
   const activePlayerId = estado.partida.turno_actual;
+  const moverPorComposicion = Array.isArray(composicion);
+  const cantidadAMover = moverPorComposicion ? totalFromComposition(composicion) : tropas;
 
-  const validation = validateMoveAction(activePlayerId, origen, destino, tropas, estado.fronteras);
+  const validation = validateMoveAction(activePlayerId, origen, destino, cantidadAMover, estado.fronteras);
   if (!validation.isValid || validation.isAttack) {
     return res.status(400).json({ 
       error: "Movimiento inválido o es un ataque (usa /atacar para batallas).",
@@ -234,8 +247,48 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
   }
 
   const tiposTropa = await obtenerTiposTropas();
-  await actualizarTerritorio(origen.id, origen.pais_duenio_id, origen.tropas_actuales - tropas, tiposTropa || []);
-  await actualizarTerritorio(destino.id, destino.pais_duenio_id, destino.tropas_actuales + tropas, tiposTropa || []);
+  const composicionOrigen = Array.isArray(origen.composicion_tropas) ? origen.composicion_tropas : [];
+  const composicionDestino = Array.isArray(destino.composicion_tropas) ? destino.composicion_tropas : [];
+
+  let composicionAMover = [];
+
+  if (moverPorComposicion) {
+    composicionAMover = composicion
+      .filter((item) => Number.isInteger(item?.id_tipo_tropa) && item.id_tipo_tropa > 0
+        && Number.isInteger(item?.cantidad) && item.cantidad > 0)
+      .map((item) => ({ id_tipo_tropa: item.id_tipo_tropa, cantidad: item.cantidad }));
+
+    if (composicionAMover.length === 0 || totalFromComposition(composicionAMover) !== cantidadAMover) {
+      return res.status(400).json({ error: "La composición solicitada para mover es inválida." });
+    }
+
+    for (const item of composicionAMover) {
+      const entradaOrigen = composicionOrigen.find((c) => c.id_tipo_tropa === item.id_tipo_tropa);
+      const disponibles = Number.isInteger(entradaOrigen?.cantidad) ? entradaOrigen.cantidad : 0;
+      if (disponibles < item.cantidad) {
+        return res.status(400).json({ error: `No hay suficientes tropas del tipo ${item.id_tipo_tropa} en el territorio origen.` });
+      }
+    }
+  } else {
+    let restante = Number.isInteger(cantidadAMover) ? cantidadAMover : 0;
+    for (const entry of composicionOrigen) {
+      if (restante <= 0) break;
+      const disponibles = Number.isInteger(entry?.cantidad) ? entry.cantidad : 0;
+      const tomar = Math.min(disponibles, restante);
+      if (tomar > 0) composicionAMover.push({ id_tipo_tropa: entry.id_tipo_tropa, cantidad: tomar });
+      restante -= tomar;
+    }
+
+    if (restante > 0) {
+      return res.status(400).json({ error: "No se pudo construir la composición a mover con las tropas disponibles." });
+    }
+  }
+
+  const composicionOrigenFinal = subtractCompositions(composicionOrigen, composicionAMover);
+  const composicionDestinoFinal = addCompositions(composicionDestino, composicionAMover);
+
+  await actualizarTerritorio(origen.id, origen.pais_duenio_id, composicionOrigenFinal, tiposTropa || []);
+  await actualizarTerritorio(destino.id, destino.pais_duenio_id, composicionDestinoFinal, tiposTropa || []);
 
   await incrementarMovimientosPartida(partidaId);
 
