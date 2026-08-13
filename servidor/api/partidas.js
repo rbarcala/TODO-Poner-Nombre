@@ -62,6 +62,27 @@ const addCompositions = (base, add) => {
   return fromCompositionMap(result);
 };
 
+const getActionValidationError = (estado) => {
+  const partida = estado?.partida;
+  if (!partida) return "Estado de partida inválido.";
+
+  if (partida.estado_partida === "finalizada") {
+    return "La partida ya está finalizada y no admite nuevas acciones.";
+  }
+
+  const turnoActual = partida.turno_actual;
+  if (!Number.isInteger(turnoActual)) {
+    return "No hay un turno activo válido para realizar acciones.";
+  }
+
+  const paisActivoExiste = (estado?.paises || []).some((p) => (p.pais_id || p.id) === turnoActual && !p.eliminado);
+  if (!paisActivoExiste) {
+    return "El turno activo no corresponde a un país válido.";
+  }
+
+  return null;
+};
+
 // GET /api/partidas - Listar partidas
 endpointsPartidas.get("/", async (req, res) => {
   const partidas = await obtenerPartidas();
@@ -138,6 +159,8 @@ endpointsPartidas.post("/:id/desplegar", async (req, res) => {
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada." });
+  const actionError = getActionValidationError(estado);
+  if (actionError) return res.status(400).json({ error: actionError });
 
   const movimientosActuales = estado.partida.movimientos_realizados || 0;
   if (movimientosActuales >= 2) {
@@ -226,6 +249,8 @@ endpointsPartidas.post("/:id/mover", async (req, res) => {
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
+  const actionError = getActionValidationError(estado);
+  if (actionError) return res.status(400).json({ error: actionError });
 
   const movimientosActuales = estado.partida.movimientos_realizados || 0;
   if (movimientosActuales >= 2) {
@@ -303,6 +328,8 @@ endpointsPartidas.post("/:id/atacar", async (req, res) => {
 
   const estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
+  const actionError = getActionValidationError(estado);
+  if (actionError) return res.status(400).json({ error: actionError });
 
   const movimientosActuales = estado.partida.movimientos_realizados || 0;
   if (movimientosActuales >= 2) {
@@ -411,6 +438,13 @@ endpointsPartidas.post("/:id/pasar-turno", async (req, res) => {
 
   let estado = await obtenerEstadoCompletoPartida(partidaId);
   if (!estado) return res.status(404).json({ error: "Partida no encontrada" });
+
+  if (estado.partida?.estado_partida === "finalizada") {
+    return res.status(400).json({ error: "La partida ya está finalizada y no puede avanzar turnos." });
+  }
+  if (!Number.isInteger(estado.partida?.turno_actual)) {
+    return res.status(400).json({ error: "No hay un turno activo válido para avanzar." });
+  }
 
   const humanoPaisId = estado.paises[0]?.pais_id || estado.paises[0]?.id;
   const catalogTropas = await obtenerTiposTropas();
