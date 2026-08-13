@@ -38,6 +38,10 @@ let catalogoTropas = [];
 let opcionesRefuerzoActuales = [];
 let seleccionRefuerzo = new Map();
 let modalRefuerzoAbierto = false;
+let opcionesAtaqueActuales = [];
+let seleccionAtaque = new Map();
+let modalAtaqueAbierto = false;
+let territorioDestinoAtaque = null;
 
 const FORMATO_COMPOSICION_EJEMPLO = "1:2,2:1";
 
@@ -75,6 +79,10 @@ function configurarEventosGlobales() {
             cerrarModalRefuerzo();
             return;
         }
+        if (e.key === 'Escape' && modalAtaqueAbierto) {
+            cerrarModalAtaque();
+            return;
+        }
         if (e.key === 'Escape' && territorioSeleccionado) {
             deseleccionarTerritorio();
         }
@@ -94,6 +102,9 @@ function configurarEventosGlobales() {
     document.getElementById('btn-cerrar-refuerzo')?.addEventListener('click', cerrarModalRefuerzo);
     document.getElementById('btn-confirmar-refuerzo')?.addEventListener('click', confirmarCompraRefuerzo);
     document.getElementById('refuerzo-lista')?.addEventListener('click', manejarClickSelectorRefuerzo);
+    document.getElementById('btn-cerrar-ataque')?.addEventListener('click', cerrarModalAtaque);
+    document.getElementById('btn-confirmar-ataque')?.addEventListener('click', confirmarAtaqueModal);
+    document.getElementById('ataque-lista')?.addEventListener('click', manejarClickSelectorAtaque);
 }
 
 //INTERFAZ
@@ -150,6 +161,7 @@ function deseleccionarTerritorio() {
     modoMoverActivo = false;
     modoAtacarActivo = false;
     cerrarModalRefuerzo();
+    cerrarModalAtaque();
     
     document.getElementById('panel-acciones').style.display = 'none';
     ocultarPanel('panel-mover-tropas');
@@ -262,49 +274,23 @@ async function procesarAtaque(territorioDestino) {
         return;
     }
 
-    const composicion = await solicitarComposicionPorPrompt({
-        titulo: `Atacar: ${territorioOrigenMover.nombre || 'origen'} -> ${territorioDestino.nombre || 'destino'}`,
-        opciones: obtenerOpcionesDesdeTerritorio(territorioOrigenMover),
-        maximoTotal: territorioOrigenMover.tropas_actuales - 1,
-        presupuestoMaximo: null
-    });
-
-    if (!composicion) {
+    const maximoAtacantes = (territorioOrigenMover.tropas_actuales || 0) - 1;
+    if (maximoAtacantes <= 0) {
+        alert("Necesitás al menos 2 tropas en el territorio de origen para atacar.");
         deseleccionarTerritorio();
         return;
     }
 
-    try {
-        const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestino.id, composicion);
-        estadoJuego = resultadoAtaque.estado;
-        
-        const res = resultadoAtaque.combatResult;
-        if (res) {
-            const tiradasAtaque = res.attackRolls ? res.attackRolls.join(", ") : "";
-            const tiradasDefensa = res.defenseRolls ? res.defenseRolls.join(", ") : "";
-            
-            const modAtkStr = res.modAttackUsed !== 1 ? ` (Mod. Terreno: x${res.modAttackUsed})` : "";
-            const modDefStr = res.modDefenseUsed !== 1 ? ` (Mod. Terreno: x${res.modDefenseUsed})` : "";
-
-            const textoResultado = res.attackerWins
-                ? `⚔️ ¡VICTORIA DE ATAQUE!\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\n¡Conquistaste el territorio!`
-                : `🛡️ DERROTA EN EL ATAQUE\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nEl defensor repelió el asalto.`;
-            alert(textoResultado);
-        }
-
-        if (resultadoAtaque.victory?.isGameOver) {
-            alert(`🏆 ¡PARTIDA FINALIZADA!\n\nGanó la civilización ID: ${resultadoAtaque.victory.winnerCountryId}`);
-        }
-
-        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
-        actualizarInfoTurno();
-    } catch (error) {
-        console.error("Error al atacar:", error);
-        alert(`No se pudo atacar: \n- ${error.message}`);
+    opcionesAtaqueActuales = obtenerOpcionesDesdeTerritorio(territorioOrigenMover);
+    if (!opcionesAtaqueActuales.length) {
+        alert("No hay tropas disponibles para atacar.");
+        deseleccionarTerritorio();
+        return;
     }
-    
-    deseleccionarTerritorio();
-    verificarYMostrarVictoria();
+
+    territorioDestinoAtaque = territorioDestino;
+    seleccionAtaque = new Map(opcionesAtaqueActuales.map((item) => [item.id_tipo_tropa, 0]));
+    abrirModalAtaque(territorioOrigenMover, territorioDestinoAtaque, maximoAtacantes);
 }
 
 function verificarYMostrarVictoria() {
@@ -764,6 +750,174 @@ async function confirmarCompraRefuerzo() {
     } catch (error) {
         console.error("Error al confirmar refuerzo:", error);
         alert(`No se pudo reforzar:\n- ${error.message}`);
+    }
+}
+
+function abrirModalAtaque(origen, destino, maximoAtacantes) {
+    const modal = document.getElementById('modal-ataque');
+    const titulo = document.getElementById('ataque-titulo');
+    const subtitulo = document.getElementById('ataque-subtitulo');
+    const limite = document.getElementById('ataque-limite');
+    if (!modal || !titulo || !subtitulo || !limite) return;
+
+    titulo.textContent = `Atacar ${destino.nombre || `Territorio #${destino.id}`}`;
+    subtitulo.textContent = `Desde ${origen.nombre || `Territorio #${origen.id}`} hacia ${destino.pais_duenio_nombre || 'enemigo'}.`;
+    limite.textContent = `Máximo a enviar: ${maximoAtacantes} tropas`;
+
+    document.getElementById('panel-acciones').style.display = 'none';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    modalAtaqueAbierto = true;
+
+    renderOpcionesAtaque();
+    actualizarResumenAtaque();
+}
+
+function cerrarModalAtaque() {
+    const modal = document.getElementById('modal-ataque');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    modalAtaqueAbierto = false;
+    territorioDestinoAtaque = null;
+
+    if (territorioSeleccionado) {
+        document.getElementById('panel-acciones').style.display = 'flex';
+    }
+}
+
+function renderOpcionesAtaque() {
+    const contenedor = document.getElementById('ataque-lista');
+    if (!contenedor) return;
+
+    if (!opcionesAtaqueActuales.length) {
+        contenedor.innerHTML = '<p class="text-sm text-slate-400">No hay tropas disponibles para atacar.</p>';
+        return;
+    }
+
+    contenedor.innerHTML = opcionesAtaqueActuales.map((opcion) => {
+        const cantidad = seleccionAtaque.get(opcion.id_tipo_tropa) || 0;
+        const disponibles = Number.isInteger(opcion.disponibles) ? opcion.disponibles : 0;
+        const costo = Number.isInteger(opcion.costo) ? opcion.costo : 1;
+        const dadoMin = Number.isInteger(opcion.dado_min) ? opcion.dado_min : 1;
+        const dadoMax = Number.isInteger(opcion.dado_max) ? opcion.dado_max : 6;
+        return `
+            <div class="rounded-lg border border-slate-700 bg-slate-950/70 p-3 space-y-2">
+                <div>
+                    <p class="text-sm font-bold text-slate-100">${opcion.tipo || `Tipo #${opcion.id_tipo_tropa}`}</p>
+                    <p class="text-xs text-slate-400">Disponibles: ${disponibles} | Costo: ${costo} | Dado: ${dadoMin}-${dadoMax}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button data-ataque-id="${opcion.id_tipo_tropa}" data-ataque-action="decrease" class="rounded bg-slate-700 px-3 py-1 text-sm font-bold hover:bg-slate-600">-</button>
+                    <span class="min-w-[28px] text-center font-semibold">${cantidad}</span>
+                    <button data-ataque-id="${opcion.id_tipo_tropa}" data-ataque-action="increase" class="rounded bg-slate-700 px-3 py-1 text-sm font-bold hover:bg-slate-600">+</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function construirComposicionAtaque() {
+    return Array.from(seleccionAtaque.entries())
+        .filter(([, cantidad]) => Number.isInteger(cantidad) && cantidad > 0)
+        .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
+}
+
+function actualizarResumenAtaque() {
+    const resumen = document.getElementById('ataque-resumen');
+    if (!resumen) return;
+
+    const composicion = construirComposicionAtaque();
+    const total = totalComposicion(composicion);
+    const maximo = Math.max(0, (territorioOrigenMover?.tropas_actuales || 0) - 1);
+    resumen.textContent = `Seleccionado: ${total} tropas | Máximo permitido: ${maximo}`;
+}
+
+function manejarClickSelectorAtaque(event) {
+    const boton = event.target.closest('button[data-ataque-id][data-ataque-action]');
+    if (!boton) return;
+
+    const idTipo = Number(boton.getAttribute('data-ataque-id'));
+    const action = boton.getAttribute('data-ataque-action');
+    if (!Number.isInteger(idTipo)) return;
+
+    const valorActual = seleccionAtaque.get(idTipo) || 0;
+    if (action === 'decrease') {
+        seleccionAtaque.set(idTipo, Math.max(0, valorActual - 1));
+        renderOpcionesAtaque();
+        actualizarResumenAtaque();
+        return;
+    }
+
+    if (action === 'increase') {
+        const opcion = opcionesAtaqueActuales.find((item) => item.id_tipo_tropa === idTipo);
+        const disponibles = Number.isInteger(opcion?.disponibles) ? opcion.disponibles : 0;
+        if (valorActual >= disponibles) {
+            alert("No hay más tropas disponibles de este tipo.");
+            return;
+        }
+
+        const composicionActual = construirComposicionAtaque();
+        const totalActual = totalComposicion(composicionActual);
+        const maximo = Math.max(0, (territorioOrigenMover?.tropas_actuales || 0) - 1);
+        if ((totalActual + 1) > maximo) {
+            alert("Debés dejar al menos 1 tropa en el territorio de origen.");
+            return;
+        }
+
+        seleccionAtaque.set(idTipo, valorActual + 1);
+        renderOpcionesAtaque();
+        actualizarResumenAtaque();
+    }
+}
+
+async function confirmarAtaqueModal() {
+    if (!territorioOrigenMover || !territorioDestinoAtaque) {
+        cerrarModalAtaque();
+        return;
+    }
+
+    const composicion = construirComposicionAtaque();
+    const total = totalComposicion(composicion);
+    const maximo = Math.max(0, (territorioOrigenMover?.tropas_actuales || 0) - 1);
+    if (total <= 0) {
+        alert("Debés seleccionar al menos una tropa para atacar.");
+        return;
+    }
+    if (total > maximo) {
+        alert("La cantidad seleccionada excede el máximo permitido para atacar.");
+        return;
+    }
+
+    try {
+        const resultadoAtaque = await apiAtacar(partidaId, territorioOrigenMover.id, territorioDestinoAtaque.id, composicion);
+        estadoJuego = resultadoAtaque.estado;
+
+        const res = resultadoAtaque.combatResult;
+        if (res) {
+            const tiradasAtaque = res.attackRolls ? res.attackRolls.join(", ") : "";
+            const tiradasDefensa = res.defenseRolls ? res.defenseRolls.join(", ") : "";
+            const modAtkStr = res.modAttackUsed !== 1 ? ` (Mod. Terreno: x${res.modAttackUsed})` : "";
+            const modDefStr = res.modDefenseUsed !== 1 ? ` (Mod. Terreno: x${res.modDefenseUsed})` : "";
+
+            const textoResultado = res.attackerWins
+                ? `⚔️ ¡VICTORIA DE ATAQUE!\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\n¡Conquistaste el territorio!`
+                : `🛡️ DERROTA EN EL ATAQUE\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nEl defensor repelió el asalto.`;
+            alert(textoResultado);
+        }
+
+        if (resultadoAtaque.victory?.isGameOver) {
+            alert(`🏆 ¡PARTIDA FINALIZADA!\n\nGanó la civilización ID: ${resultadoAtaque.victory.winnerCountryId}`);
+        }
+
+        cerrarModalAtaque();
+        dibujarGrafo(estadoJuego.territorios, estadoJuego.fronteras);
+        actualizarInfoTurno();
+        deseleccionarTerritorio();
+        verificarYMostrarVictoria();
+    } catch (error) {
+        console.error("Error al atacar:", error);
+        alert(`No se pudo atacar: \n- ${error.message}`);
     }
 }
 

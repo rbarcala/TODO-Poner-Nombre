@@ -146,6 +146,26 @@
         </div>
     </div>
 
+    <div id="modal-ataque" style="position: fixed; inset: 0; z-index: 20000; pointer-events: auto;" class="fixed inset-0 z-[10001] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm">
+        <div class="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900/95 p-5 shadow-2xl space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 id="ataque-titulo" class="text-xl font-bold text-red-400">Atacar territorio</h3>
+                    <p id="ataque-subtitulo" class="text-sm text-slate-300 mt-1">Seleccioná las tropas para atacar.</p>
+                    <p id="ataque-limite" class="text-sm text-amber-300 mt-1">Máximo a enviar: 0 tropas</p>
+                </div>
+                <button id="btn-cerrar-ataque" class="rounded bg-slate-700 px-3 py-1 text-sm font-semibold hover:bg-slate-600">Cerrar</button>
+            </div>
+
+            <div id="ataque-lista" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+            <div class="flex items-center justify-between border-t border-slate-700 pt-3">
+                <p id="ataque-resumen" class="text-sm text-slate-300">Seleccionado: 0 tropas</p>
+                <button id="btn-confirmar-ataque" class="rounded bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500">Confirmar ataque</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal de Victoria y Fin de Partida -->
     <div id="modal-victoria" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md">
         <div class="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900/95 p-8 text-center shadow-2xl space-y-6">
