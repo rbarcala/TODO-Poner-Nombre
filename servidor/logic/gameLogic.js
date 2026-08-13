@@ -95,6 +95,57 @@ export function buildTroopList(count, troopTypesCatalog = []) {
     return Array.from({ length: normalizedCount }, (_, index) => normalizedCatalog[index % normalizedCatalog.length]);
 }
 
+export function buildTroopListFromComposition(composicion, troopTypesCatalog = []) {
+    if (!Array.isArray(composicion) || composicion.length === 0) return [];
+
+    const catalogMap = new Map((troopTypesCatalog || []).map((t) => [t.id, t]));
+    const list = [];
+
+    for (const item of composicion) {
+        const idTipo = Number(item?.id_tipo_tropa);
+        const cantidad = Number.isInteger(item?.cantidad) && item.cantidad > 0 ? item.cantidad : 0;
+        if (!Number.isInteger(idTipo) || cantidad <= 0) continue;
+
+        const entry = catalogMap.get(idTipo) || {};
+        const unit = {
+            id_tipo_tropa: idTipo,
+            tipo: item?.tipo || entry.tipo || "Unidad",
+            dado_min: Number.isInteger(item?.dado_min) ? item.dado_min : (Number.isInteger(entry.dado_min) ? entry.dado_min : 1),
+            dado_max: Number.isInteger(item?.dado_max) ? item.dado_max : (Number.isInteger(entry.dado_max) ? entry.dado_max : 6),
+            costo: Number.isInteger(item?.costo) ? item.costo : (Number.isInteger(entry.costo) ? entry.costo : 1)
+        };
+
+        for (let i = 0; i < cantidad; i++) {
+            list.push({ ...unit });
+        }
+    }
+
+    return list;
+}
+
+export function summarizeTroopsByType(troopList = []) {
+    const map = new Map();
+    for (const unit of troopList) {
+        const idTipo = Number(unit?.id_tipo_tropa);
+        if (!Number.isInteger(idTipo)) continue;
+
+        const current = map.get(idTipo);
+        if (current) {
+            current.cantidad += 1;
+        } else {
+            map.set(idTipo, {
+                id_tipo_tropa: idTipo,
+                tipo: unit?.tipo,
+                dado_min: unit?.dado_min,
+                dado_max: unit?.dado_max,
+                costo: Number.isInteger(unit?.costo) ? unit.costo : 1,
+                cantidad: 1
+            });
+        }
+    }
+    return Array.from(map.values());
+}
+
 /**
  * Resuelve un combate entre tropas atacantes y defensoras.
  * 
@@ -114,76 +165,110 @@ export function resolveCombat(attackerCountry, defenderCountry, terrain, attacki
         throw new Error("El atacante debe enviar al menos una tropa para el combate.");
     }
     
-    // Si el territorio no está ocupado (no hay defensor o tropas defensoras)
-    if (!defendingTroops || defendingTroops.length === 0) {
-        return {
-            totalAttack: attackingTroops.length,
-            totalDefense: 0,
-            attackerWins: true,
-            attackRolls: [],
-            defenseRolls: [],
-            totalAttackBase: 0,
-            totalDefenseBase: 0,
-            modAttackUsed: 1.0,
-            modDefenseUsed: 1.0,
-            attackerHasResistance: false,
-            defenderHasResistance: false,
-            autoConquest: true
-        };
+    const normalizeUnit = (unit, index) => ({
+        _order: index,
+        id_tipo_tropa: Number(unit?.id_tipo_tropa),
+        tipo: unit?.tipo || "Unidad",
+        dado_min: Number.isInteger(unit?.dado_min) ? unit.dado_min : 1,
+        dado_max: Number.isInteger(unit?.dado_max) ? unit.dado_max : 6,
+        costo: Number.isInteger(unit?.costo) ? unit.costo : 1
+    });
+
+    const withRoll = (unit) => ({
+        ...unit,
+        dado_resultado: rollDie(unit.dado_min, unit.dado_max)
+    });
+
+    const splitByCasualties = (rolledUnits, casualties) => {
+        const sorted = [...rolledUnits].sort((a, b) => {
+            if (a.dado_resultado !== b.dado_resultado) return a.dado_resultado - b.dado_resultado;
+            if (a.costo !== b.costo) return a.costo - b.costo;
+            return a._order - b._order;
+        });
+        const dead = sorted.slice(0, casualties);
+        const deadSet = new Set(dead.map((u) => u._order));
+        const survivors = rolledUnits.filter((u) => !deadSet.has(u._order));
+        return { dead, survivors };
+    };
+
+    const stripMeta = (units) => units.map((u) => ({
+        id_tipo_tropa: Number.isInteger(u.id_tipo_tropa) ? u.id_tipo_tropa : undefined,
+        tipo: u.tipo,
+        dado_min: u.dado_min,
+        dado_max: u.dado_max,
+        costo: u.costo,
+        dado_resultado: u.dado_resultado
+    }));
+
+    const preparedAttackers = attackingTroops.map(normalizeUnit).map(withRoll);
+    const preparedDefenders = (defendingTroops || []).map(normalizeUnit).map(withRoll);
+
+    const attackRolls = preparedAttackers.map((u) => u.dado_resultado);
+    const defenseRolls = preparedDefenders.map((u) => u.dado_resultado);
+    const totalAttack = attackRolls.reduce((sum, val) => sum + val, 0);
+    const totalDefense = defenseRolls.reduce((sum, val) => sum + val, 0);
+
+    const autoConquest = preparedDefenders.length === 0;
+    const attackerWins = autoConquest || totalAttack > totalDefense;
+    const isTie = !autoConquest && totalAttack === totalDefense;
+    const defenderWins = !autoConquest && totalDefense > totalAttack;
+
+    let attackerDead = [];
+    let defenderDead = [];
+    let attackerSurvivors = [...preparedAttackers];
+    let defenderSurvivors = [...preparedDefenders];
+
+    if (attackerWins) {
+        defenderDead = [...preparedDefenders];
+        defenderSurvivors = [];
+    } else if (defenderWins) {
+        const attackerLosses = Math.floor(preparedAttackers.length / 2);
+        const split = splitByCasualties(preparedAttackers, attackerLosses);
+        attackerDead = split.dead;
+        attackerSurvivors = split.survivors;
+    } else if (isTie) {
+        const attackerLosses = Math.floor(preparedAttackers.length / 2);
+        const defenderLosses = Math.floor(preparedDefenders.length / 2);
+        const splitAtk = splitByCasualties(preparedAttackers, attackerLosses);
+        const splitDef = splitByCasualties(preparedDefenders, defenderLosses);
+        attackerDead = splitAtk.dead;
+        defenderDead = splitDef.dead;
+        attackerSurvivors = splitAtk.survivors;
+        defenderSurvivors = splitDef.survivors;
     }
 
-    // 1. Tiradas bases
-    const attackRolls = attackingTroops.map(t => rollDie(t.dado_min, t.dado_max));
-    const defenseRolls = defendingTroops.map(t => rollDie(t.dado_min, t.dado_max));
-
-    const totalAttackBase = attackRolls.reduce((sum, val) => sum + val, 0);
-    const totalDefenseBase = defenseRolls.reduce((sum, val) => sum + val, 0);
-
-    // 2. Modificadores de terreno
-    let modAttack = terrain && typeof terrain.modificador_ataque === 'number' 
-        ? terrain.modificador_ataque 
-        : (terrain && terrain.modificador_ataque ? parseFloat(terrain.modificador_ataque) : 1.0);
-        
-    let modDefense = terrain && typeof terrain.modificador_defensa === 'number' 
-        ? terrain.modificador_defensa 
-        : (terrain && terrain.modificador_defensa ? parseFloat(terrain.modificador_defensa) : 1.0);
-
-    // 3. Chequear resistencias de civilización (si resiste el terreno, ignora penalizaciones < 1.0)
-    let attackerHasResistance = false;
-    let defenderHasResistance = false;
-
-    if (attackerCountry && terrain && attackerCountry.resistencia_terreno_id === terrain.id) {
-        attackerHasResistance = true;
-        if (modAttack < 1.0) {
-            modAttack = 1.0;
-        }
-    }
-
-    if (defenderCountry && terrain && defenderCountry.resistencia_terreno_id === terrain.id) {
-        defenderHasResistance = true;
-        if (modDefense < 1.0) {
-            modDefense = 1.0;
-        }
-    }
-
-    // 4. Calcular puntajes finales
-    const totalAttack = Math.round(totalAttackBase * modAttack);
-    const totalDefense = Math.round(totalDefenseBase * modDefense);
-
-    // El atacante gana si supera la defensa
-    const attackerWins = totalAttack > totalDefense;
+    const attackerSurvivorUnits = stripMeta(attackerSurvivors);
+    const defenderSurvivorUnits = stripMeta(defenderSurvivors);
+    const attackerEliminatedUnits = stripMeta(attackerDead);
+    const defenderEliminatedUnits = stripMeta(defenderDead);
 
     return {
         totalAttack,
         totalDefense,
         attackerWins,
+        defenderWins,
+        isTie,
+        autoConquest,
+        territoryConquered: attackerWins,
         attackRolls,
         defenseRolls,
-        totalAttackBase,
-        totalDefenseBase,
-        modAttackUsed: modAttack,
-        modDefenseUsed: modDefense,
-        attackerHasResistance,
-        defenderHasResistance
+        attackerUnitsRolled: stripMeta(preparedAttackers),
+        defenderUnitsRolled: stripMeta(preparedDefenders),
+        attackerCasualties: attackerDead.length,
+        defenderCasualties: defenderDead.length,
+        attackerEliminatedUnits,
+        defenderEliminatedUnits,
+        attackerSurvivorUnits,
+        defenderSurvivorUnits,
+        attackerSurvivorComposition: summarizeTroopsByType(attackerSurvivorUnits),
+        defenderSurvivorComposition: summarizeTroopsByType(defenderSurvivorUnits),
+        attackerEliminatedComposition: summarizeTroopsByType(attackerEliminatedUnits),
+        defenderEliminatedComposition: summarizeTroopsByType(defenderEliminatedUnits),
+        modAttackUsed: 1.0,
+        modDefenseUsed: 1.0,
+        attackerHasResistance: false,
+        defenderHasResistance: false,
+        totalAttackBase: totalAttack,
+        totalDefenseBase: totalDefense
     };
 }

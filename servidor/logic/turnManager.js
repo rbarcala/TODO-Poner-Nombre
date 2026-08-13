@@ -172,10 +172,15 @@ export function executeBotTurn(botCountry, allTerritories, fronteras, participat
 
         if (combatResult.attackerWins) {
             target.pais_duenio_id = botId;
-            target.tropas_actuales = attack.tropas_atacantes;
-            origin.tropas_actuales = 1;
+            target.tropas_actuales = (combatResult.attackerSurvivorUnits || []).length;
+            origin.tropas_actuales = Math.max(1, (origin.tropas_actuales || 0) - attack.tropas_atacantes);
         } else {
-            origin.tropas_actuales = 1;
+            const bajasAtacante = Number.isInteger(combatResult.attackerCasualties) ? combatResult.attackerCasualties : 0;
+            const defensorSobreviviente = Array.isArray(combatResult.defenderSurvivorUnits)
+                ? combatResult.defenderSurvivorUnits.length
+                : (target.tropas_actuales || 1);
+            origin.tropas_actuales = Math.max(1, (origin.tropas_actuales || 0) - bajasAtacante);
+            target.tropas_actuales = defensorSobreviviente;
         }
 
         const victory = checkVictoryCondition(tempTerritories, participatingCountries);
