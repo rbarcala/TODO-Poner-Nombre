@@ -73,24 +73,28 @@ function hideForms() {
 function renderColorPaletteOptions() {
   document.querySelectorAll('select[name="color_hex"]').forEach((select) => {
     const selectedValue = (select.value || '').toUpperCase();
-    const options = ['<option value="">Color</option>']
+    const options = ['<option value="" disabled>Seleccionar color...</option>']
       .concat(COLOR_PALETTE.map((color) => `<option value="${color.hex}">${color.nombre}</option>`));
     select.innerHTML = options.join('');
     if (selectedValue && ALLOWED_COLORS.has(selectedValue)) {
       select.value = selectedValue;
+    } else {
+      select.selectedIndex = 0;
     }
   });
 }
 
 function captureInitialPlaceholders() {
   document.querySelectorAll('form').forEach((form) => {
+    const formDomId = form.getAttribute('id');
+    if (!formDomId) return;
     const perForm = {};
     form.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((field) => {
       const key = field.getAttribute('name');
       if (!key) return;
       perForm[key] = field.getAttribute('placeholder') || '';
     });
-    formPlaceholders.set(form.id, perForm);
+    formPlaceholders.set(formDomId, perForm);
   });
 }
 
@@ -352,18 +356,38 @@ function initEditor() {
   captureInitialPlaceholders();
   renderColorPaletteOptions();
 
-  document.querySelectorAll('.cancel-btn').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const formId = button.closest('form')?.id || '';
-      const entity = formId.replace('form-', '');
-      resetForm(entity);
-    });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      const activeButton = document.activeElement;
+      if (activeButton instanceof HTMLButtonElement && activeButton.dataset.action === 'cancel') {
+        event.preventDefault();
+        const formId = activeButton.closest('form')?.getAttribute('id') || '';
+        const entity = formId.replace('form-', '');
+        if (entity) resetForm(entity);
+        return;
+      }
+    }
+
+    if (event.key !== 'Escape') return;
+    const visibleForm = document.querySelector('form:not(.hidden)');
+    if (!(visibleForm instanceof HTMLFormElement)) return;
+    event.preventDefault();
+    const entity = (visibleForm.getAttribute('id') || '').replace('form-', '');
+    if (!entity) return;
+    resetForm(entity);
   });
 
   document.addEventListener('click', async (event) => {
     const target = event.target instanceof HTMLElement ? event.target.closest('button[data-action]') : null;
+
+    if (target instanceof HTMLElement && target.dataset.action === 'cancel') {
+      event.preventDefault();
+      event.stopPropagation();
+      const formId = target.closest('form')?.getAttribute('id') || '';
+      const entity = formId.replace('form-', '');
+      resetForm(entity);
+      return;
+    }
 
     const addButton = event.target instanceof HTMLElement ? event.target.closest('.add-btn') : null;
     if (addButton instanceof HTMLElement) {
@@ -371,14 +395,6 @@ function initEditor() {
       resetForm(entity);
       restorePlaceholders(document.getElementById(`form-${entity}`));
       showForm(entity);
-      return;
-    }
-
-    const cancelButton = event.target instanceof HTMLElement ? event.target.closest('.cancel-btn') : null;
-    if (cancelButton instanceof HTMLElement) {
-      const formId = cancelButton.closest('form')?.id || '';
-      const entity = formId.replace('form-', '');
-      resetForm(entity);
       return;
     }
 

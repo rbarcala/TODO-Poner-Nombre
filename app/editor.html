@@ -29,7 +29,7 @@
                     <input type="hidden" name="id">
                     <input name="nombre" placeholder="Nombre" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <select name="color_hex" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                        <option value="">Color</option>
+                        <option value="" disabled selected>Seleccionar color...</option>
                     </select>
                     <input name="economia" type="number" placeholder="Economía" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <input name="tecnologia" type="number" placeholder="Tecnología" class="w-full rounded px-3 py-2 bg-slate-800" required>
@@ -37,7 +37,7 @@
                     <select name="terreno_id" class="w-full rounded px-3 py-2 bg-slate-800"></select>
                     <div class="flex gap-2">
                         <button type="submit" class="bg-red-700 px-3 py-2 rounded cursor-pointer">Guardar</button>
-                        <button type="button" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
+                        <button type="button" data-action="cancel" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
                     </div>
                 </form>
                 <div id="list-paises" class="space-y-2"></div>
@@ -57,7 +57,7 @@
                     <input name="costo" type="number" placeholder="Costo" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <div class="flex gap-2">
                         <button type="submit" class="bg-red-700 px-3 py-2 rounded cursor-pointer">Guardar</button>
-                        <button type="button" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
+                        <button type="button" data-action="cancel" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
                     </div>
                 </form>
                 <div id="list-tropas" class="space-y-2"></div>
@@ -73,13 +73,13 @@
                     <input name="nombre" placeholder="Nombre" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <input name="descripcion" placeholder="Descripción" class="w-full rounded px-3 py-2 bg-slate-800">
                     <select name="color_hex" class="w-full rounded px-3 py-2 bg-slate-800" required>
-                        <option value="">Color</option>
+                        <option value="" disabled selected>Seleccionar color...</option>
                     </select>
                     <input name="modificador_ataque" type="number" step="0.1" placeholder="Modificador ataque" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <input name="modificador_defensa" type="number" step="0.1" placeholder="Modificador defensa" class="w-full rounded px-3 py-2 bg-slate-800" required>
                     <div class="flex gap-2">
                         <button type="submit" class="bg-red-700 px-3 py-2 rounded cursor-pointer">Guardar</button>
-                        <button type="button" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
+                        <button type="button" data-action="cancel" class="cancel-btn bg-slate-700 px-3 py-2 rounded cursor-pointer">Cancelar</button>
                     </div>
                 </form>
                 <div id="list-terrenos" class="space-y-2"></div>
