@@ -453,14 +453,18 @@ function cerrarModalResumenBot() {
 }
 
 function mostrarResumenTurnoBot(bot, index) {
+    const titulo = `🤖 TURNO BOT ${index + 1}: ${String(bot.botNombre || `Bot #${bot.botId}`).toUpperCase()}`;
+    const contenido = formatearResumenTurnoBot(bot, index);
+    return mostrarModalResumenDetallado(titulo, contenido);
+}
+
+function mostrarModalResumenDetallado(titulo, contenido) {
     return new Promise((resolve) => {
         if (typeof resolverModalBotResumen === 'function') {
             const resolverAnterior = resolverModalBotResumen;
             resolverModalBotResumen = null;
             resolverAnterior();
         }
-        const titulo = `🤖 TURNO BOT ${index + 1}: ${String(bot.botNombre || `Bot #${bot.botId}`).toUpperCase()}`;
-        const contenido = formatearResumenTurnoBot(bot, index);
         resolverModalBotResumen = resolve;
         abrirModalResumenBot(titulo, contenido);
     });
@@ -1018,7 +1022,7 @@ async function confirmarAtaqueModal() {
             const textoResultado = res.attackerWins
                 ? `⚔️ ¡VICTORIA DE ATAQUE!\n\nUNIDADES PARTICIPANTES:\n- ATACANTE: ${participantesAtacante}\n- DEFENSOR: ${participantesDefensor}\n\nTIRADAS POR UNIDAD:\n- ATACANTE:\n${detalleTiradasAtacante}\n- DEFENSOR:\n${detalleTiradasDefensor}\n\nRESUMEN DE DADOS:\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nBAJAS:\n- ATACANTE: ${bajasAtacante}\n- DEFENSOR: ${bajasDefensor}\n\n¡Conquistaste el territorio!`
                 : `🛡️ DERROTA EN EL ATAQUE\n\nUNIDADES PARTICIPANTES:\n- ATACANTE: ${participantesAtacante}\n- DEFENSOR: ${participantesDefensor}\n\nTIRADAS POR UNIDAD:\n- ATACANTE:\n${detalleTiradasAtacante}\n- DEFENSOR:\n${detalleTiradasDefensor}\n\nRESUMEN DE DADOS:\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nBAJAS:\n- ATACANTE: ${bajasAtacante}\n- DEFENSOR: ${bajasDefensor}\n\nEl defensor repelió el asalto.`;
-            alert(textoResultado);
+            await mostrarModalResumenDetallado("⚔️ RESULTADO DEL ATAQUE", textoResultado);
         }
 
         if (resultadoAtaque.victory?.isGameOver) {
