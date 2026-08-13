@@ -83,6 +83,13 @@ function configurarEventosGlobales() {
             cerrarModalAtaque();
             return;
         }
+        if (e.key === 'Escape' && modoAtacarActivo && territorioSeleccionado) {
+            modoAtacarActivo = false;
+            territorioOrigenMover = null;
+            ocultarPanel('panel-atacar');
+            document.getElementById('panel-acciones').style.display = 'flex';
+            return;
+        }
         if (e.key === 'Escape' && territorioSeleccionado) {
             deseleccionarTerritorio();
         }
