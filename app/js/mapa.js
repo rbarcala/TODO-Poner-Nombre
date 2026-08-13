@@ -830,6 +830,33 @@ function construirComposicionAtaque() {
         .map(([id_tipo_tropa, cantidad]) => ({ id_tipo_tropa, cantidad }));
 }
 
+function formatearComposicionSimple(composicion) {
+    if (!Array.isArray(composicion) || composicion.length === 0) return "Sin unidades";
+    return composicion
+        .filter((item) => Number.isInteger(item?.cantidad) && item.cantidad > 0)
+        .map((item) => `${item.tipo || `Tipo #${item.id_tipo_tropa}`} x${item.cantidad}`)
+        .join(", ");
+}
+
+function resumirUnidadesPorTipo(unidades) {
+    if (!Array.isArray(unidades) || unidades.length === 0) return "Sin unidades";
+    const mapa = new Map();
+    for (const unidad of unidades) {
+        const key = `${unidad?.tipo || `Tipo #${unidad?.id_tipo_tropa}`}`;
+        mapa.set(key, (mapa.get(key) || 0) + 1);
+    }
+    return Array.from(mapa.entries())
+        .map(([tipo, cantidad]) => `${tipo} x${cantidad}`)
+        .join(", ");
+}
+
+function formatearTiradasPorUnidad(unidades) {
+    if (!Array.isArray(unidades) || unidades.length === 0) return "Sin tiradas";
+    return unidades
+        .map((unidad, index) => `  ${index + 1}. ${unidad.tipo || `Tipo #${unidad.id_tipo_tropa}`}: ${unidad.dado_resultado}`)
+        .join("\n");
+}
+
 function actualizarResumenAtaque() {
     const resumen = document.getElementById('ataque-resumen');
     if (!resumen) return;
@@ -906,10 +933,16 @@ async function confirmarAtaqueModal() {
             const tiradasDefensa = res.defenseRolls ? res.defenseRolls.join(", ") : "";
             const modAtkStr = res.modAttackUsed !== 1 ? ` (Mod. Terreno: x${res.modAttackUsed})` : "";
             const modDefStr = res.modDefenseUsed !== 1 ? ` (Mod. Terreno: x${res.modDefenseUsed})` : "";
+            const participantesAtacante = resumirUnidadesPorTipo(res.attackerUnitsRolled || []);
+            const participantesDefensor = resumirUnidadesPorTipo(res.defenderUnitsRolled || []);
+            const bajasAtacante = `${res.attackerCasualties || 0} (${formatearComposicionSimple(res.attackerEliminatedComposition || [])})`;
+            const bajasDefensor = `${res.defenderCasualties || 0} (${formatearComposicionSimple(res.defenderEliminatedComposition || [])})`;
+            const detalleTiradasAtacante = formatearTiradasPorUnidad(res.attackerUnitsRolled || []);
+            const detalleTiradasDefensor = formatearTiradasPorUnidad(res.defenderUnitsRolled || []);
 
             const textoResultado = res.attackerWins
-                ? `⚔️ ¡VICTORIA DE ATAQUE!\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\n¡Conquistaste el territorio!`
-                : `🛡️ DERROTA EN EL ATAQUE\n\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nEl defensor repelió el asalto.`;
+                ? `⚔️ ¡VICTORIA DE ATAQUE!\n\nUNIDADES PARTICIPANTES:\n- ATACANTE: ${participantesAtacante}\n- DEFENSOR: ${participantesDefensor}\n\nTIRADAS POR UNIDAD:\n- ATACANTE:\n${detalleTiradasAtacante}\n- DEFENSOR:\n${detalleTiradasDefensor}\n\nRESUMEN DE DADOS:\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nBAJAS:\n- ATACANTE: ${bajasAtacante}\n- DEFENSOR: ${bajasDefensor}\n\n¡Conquistaste el territorio!`
+                : `🛡️ DERROTA EN EL ATAQUE\n\nUNIDADES PARTICIPANTES:\n- ATACANTE: ${participantesAtacante}\n- DEFENSOR: ${participantesDefensor}\n\nTIRADAS POR UNIDAD:\n- ATACANTE:\n${detalleTiradasAtacante}\n- DEFENSOR:\n${detalleTiradasDefensor}\n\nRESUMEN DE DADOS:\n- ATACANTE: Dados [${tiradasAtaque}] -> Suma: ${res.totalAttackBase}${modAtkStr} = TOTAL ${res.totalAttack}\n- DEFENSOR: Dados [${tiradasDefensa}] -> Suma: ${res.totalDefenseBase}${modDefStr} = TOTAL ${res.totalDefense}\n\nBAJAS:\n- ATACANTE: ${bajasAtacante}\n- DEFENSOR: ${bajasDefensor}\n\nEl defensor repelió el asalto.`;
             alert(textoResultado);
         }
 
